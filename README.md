@@ -71,6 +71,8 @@ src/
 │   ├── glossary.ts      203 termes
 │   ├── excel.ts         Raccourcis, conventions, formules, erreurs Excel
 │   ├── dealdocs.ts      Les 20 documents d'un process M&A
+│   ├── paths.ts         8 parcours d'apprentissage par objectif
+│   ├── publicmna.ts     M&A public par juridiction (US / France-UE / UK)
 │   ├── screening.ts     Simulateur de buyer screening
 │   ├── analystday.ts    Scénarios de journée d'analyste
 │   ├── resources.ts     Catalogue de ressources externes
@@ -103,10 +105,12 @@ documentées et erreurs explicites sur entrée invalide. Couvert et testé :
 - DCF : TV Gordon et exit multiple, convention mid-year, croissance implicite
 - Prime d'acquisition
 - Merger model : accretion/dilution cash/dette/titres, **break-even de synergies**
+- Purchase price allocation : write-up, DTL, goodwill
+- Valeur capitalisée des synergies (à comparer à la prime payée)
 - LBO : échéancier de dette avec cash sweep, MOIC, IRR
 
 ```bash
-npm test   # 30 tests
+npm test   # 38 tests
 ```
 
 Ces fonctions alimentent directement la page **Outils** — les calculateurs et les tests
@@ -176,14 +180,34 @@ Pour brancher un backend plus tard (Supabase, Firebase), le point d'entrée uniq
 L'app fonctionne intégralement sans IA — la correction des réponses libres passe alors
 par le grader heuristique de `src/lib/grader.ts`.
 
-Avec une clé API Anthropic (Paramètres → Coach IA), tu débloques l'entretien live
-conversationnel et une correction plus fine.
+Deux modes de connexion, le proxy étant prioritaire quand les deux sont configurés.
 
-> ⚠️ **Sécurité** : la clé est stockée dans le navigateur et les appels partent du client
-> (`dangerouslyAllowBrowser`). C'est acceptable pour un usage **personnel en local**.
-> Sur un site public, toute personne qui visite la page pourrait extraire la clé si elle
-> y est saisie — passe alors par un proxy backend (Cloudflare Worker, fonction serverless)
-> qui garde la clé côté serveur.
+### Mode proxy serveur — recommandé en ligne ✅
+
+La clé API vit dans les variables d'environnement Netlify et **ne touche jamais le
+navigateur**. La fonction `netlify/functions/anthropic.mjs` la garde côté serveur et
+borne chaque requête (modèle validé, `max_tokens` plafonné à 4096, corps limité à 120 Ko).
+
+Sur Netlify → **Site configuration** → **Environment variables** :
+
+| Variable | Valeur |
+|---|---|
+| `ANTHROPIC_API_KEY` | ta clé API Anthropic |
+| `AI_ACCESS_TOKEN` | un secret long que tu inventes |
+
+Redéploie, puis colle le même `AI_ACCESS_TOKEN` dans Paramètres → Mode proxy serveur.
+Le jeton ne donne accès qu'à cet endpoint borné : il ne peut pas servir ailleurs.
+
+Seule limite : le proxy ne relaie pas le streaming, donc l'assistant répond d'un bloc
+au lieu de s'afficher mot à mot.
+
+### Mode clé locale — usage local uniquement ⚠️
+
+La clé est stockée dans le navigateur et les appels partent du client
+(`dangerouslyAllowBrowser`). Acceptable quand tu travailles **sur ta machine**.
+
+> ⚠️ Sur le site public, une clé saisie dans ce mode serait extractible par toute
+> personne qui visite la page. Utilise le mode proxy.
 
 ---
 

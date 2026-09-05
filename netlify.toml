@@ -2,8 +2,20 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
 
-# SPA : toutes les routes sont servies par index.html (React Router)
+[build.environment]
+  NODE_VERSION = "20"
+
+# L'ordre compte : la première règle qui correspond gagne. L'endpoint de la
+# fonction doit donc être déclaré AVANT le catch-all SPA, sinon il serait
+# servi comme index.html.
+[[redirects]]
+  from = "/api/ai"
+  to = "/.netlify/functions/anthropic"
+  status = 200
+
+# SPA : toutes les autres routes sont servies par index.html (React Router)
 [[redirects]]
   from = "/*"
   to = "/index.html"

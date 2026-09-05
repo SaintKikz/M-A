@@ -22,6 +22,44 @@ export interface AiConfig {
 }
 
 const STORAGE_KEY = "ma-lab-ai-config";
+const PROXY_TOKEN_KEY = "ma-lab-ai-proxy-token";
+const PROXY_URL = "/api/ai";
+
+// ─── Mode proxy (recommandé en déploiement public) ─────────────────────────
+// La clé API vit côté serveur (fonction Netlify). Le navigateur ne présente
+// qu'un jeton d'accès partagé, qui ne donne accès qu'à cet endpoint borné.
+export function getProxyToken(): string | null {
+  try { return localStorage.getItem(PROXY_TOKEN_KEY) || null; } catch { return null; }
+}
+
+export function saveProxyToken(token: string | null) {
+  try {
+    if (!token) localStorage.removeItem(PROXY_TOKEN_KEY);
+    else localStorage.setItem(PROXY_TOKEN_KEY, token);
+  } catch { /* stockage indisponible : le mode proxy sera simplement inactif */ }
+}
+
+export function proxyEnabled(): boolean {
+  return getProxyToken() !== null;
+}
+
+/** Appelle le proxy serveur. Renvoie le texte de la réponse. */
+async function callProxy(params: Record<string, unknown>): Promise<string> {
+  const token = getProxyToken();
+  if (!token) throw new Error("Aucun jeton d'accès configuré pour le proxy.");
+  const res = await fetch(PROXY_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-ma-lab-token": token },
+    body: JSON.stringify({ params }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error((data as { error?: string }).error ?? `Erreur proxy (${res.status})`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
+  }
+  return (data as { text?: string }).text ?? "";
+}
 
 export const AI_MODELS = [
   { id: "claude-opus-4-8", label: "Claude Opus 4.8 — le meilleur coach (recommandé)" },
@@ -46,7 +84,7 @@ export function saveAiConfig(cfg: AiConfig | null) {
 }
 
 export function aiEnabled(): boolean {
-  return getAiConfig() !== null;
+  return getAiConfig() !== null || proxyEnabled();
 }
 
 async function client(): Promise<Anthropic> {
@@ -60,6 +98,16 @@ function model(): string {
   return getAiConfig()?.model ?? "claude-opus-4-8";
 }
 
+/**
+ * Envoie une requête via le proxy serveur si un jeton est configuré, sinon via
+ * la clé locale. Le proxy est prioritaire : c'est le mode sûr.
+ */
+async function ask(params: Record<string, unknown>): Promise<string> {
+  if (proxyEnabled()) return callProxy(params);
+  const resp = await (await client()).messages.create(params as never);
+  return textOf(resp as Anthropic.Message);
+}
+
 function textOf(response: Anthropic.Message): string {
   for (const block of response.content) if (block.type === "text") return block.text;
   return "";
@@ -68,12 +116,12 @@ function textOf(response: Anthropic.Message): string {
 /** Test de connexion : renvoie null si OK, sinon le message d'erreur. */
 export async function aiTest(): Promise<string | null> {
   try {
-    const resp = await (await client()).messages.create({
+    const text = await ask({
       model: model(),
       max_tokens: 64,
       messages: [{ role: "user", content: "Réponds uniquement : OK" }],
     });
-    return textOf(resp).includes("OK") ? null : "Réponse inattendue de l'API.";
+    return text.includes("OK") ? null : "Réponse inattendue de l'API.";
   } catch (e) {
     const err = e as { status?: number; message?: string };
     if (err?.status === 401) return "Clé API invalide.";
@@ -120,7 +168,7 @@ export async function aiGradeAnswer(
     "Évalue cette réponse.",
   ].filter(Boolean).join("\n\n");
 
-  const resp = await (await client()).messages.create({
+  const raw = await ask({
     model: model(),
     max_tokens: 2048,
     system: GRADER_SYSTEM,
@@ -128,7 +176,7 @@ export async function aiGradeAnswer(
     messages: [{ role: "user", content: parts }],
   });
 
-  const data = JSON.parse(textOf(resp)) as {
+  const data = JSON.parse(raw) as {
     score: number; technique: number; structure: number; concision: number;
     verdict: string; misses: string[]; tips: string[]; betterAnswer: string;
   };
@@ -165,13 +213,19 @@ export async function aiAssistantReply(
   pageContext: string,
   onDelta: (text: string) => void
 ): Promise<string> {
+  const system = pageContext
+    ? `${ASSISTANT_SYSTEM}\n\n--- Contexte : ce que l'étudiant a sous les yeux en ce moment ---\n${pageContext.slice(0, 2000)}`
+    : ASSISTANT_SYSTEM;
+
+  // Le proxy serveur ne relaie pas le streaming : on livre la réponse d'un bloc.
+  if (proxyEnabled()) {
+    const text = await callProxy({ model: model(), max_tokens: 1500, system, messages: history });
+    onDelta(text);
+    return text;
+  }
+
   const stream = (await client()).messages.stream({
-    model: model(),
-    max_tokens: 1500,
-    system: pageContext
-      ? `${ASSISTANT_SYSTEM}\n\n--- Contexte : ce que l'étudiant a sous les yeux en ce moment ---\n${pageContext.slice(0, 2000)}`
-      : ASSISTANT_SYSTEM,
-    messages: history,
+    model: model(), max_tokens: 1500, system, messages: history,
   });
   stream.on("text", onDelta);
   const final = await stream.finalMessage();
@@ -180,13 +234,12 @@ export async function aiAssistantReply(
 
 // ─── « Explique-moi autrement » (Académie) ──────────────────────────────────
 export async function aiExplain(concept: string, currentExplanation: string): Promise<string> {
-  const resp = await (await client()).messages.create({
+  return ask({
     model: model(),
     max_tokens: 1024,
     system: "Tu es un professeur de finance exceptionnel, spécialiste de la vulgarisation pour étudiants qui préparent des stages en M&A. On te donne un concept et l'explication qui n'a pas suffi. Ta mission : expliquer AUTREMENT — angle différent, nouvelle analogie de la vie quotidienne, exemple chiffré ultra-simple. Maximum 150 mots, en français, ton chaleureux et direct. Ne répète pas l'explication d'origine.",
     messages: [{ role: "user", content: `Concept : ${concept}\n\nExplication qui n'a pas suffi :\n${currentExplanation.slice(0, 1500)}\n\nExplique-le moi autrement.` }],
   });
-  return textOf(resp);
 }
 
 // ─── Entretien live conversationnel ─────────────────────────────────────────
@@ -215,7 +268,7 @@ export async function aiInterviewTurn(
   persona: string,
   focus: string
 ): Promise<string> {
-  const resp = await (await client()).messages.create({
+  return ask({
     model: model(),
     max_tokens: 1024,
     thinking: { type: "adaptive" },
@@ -224,7 +277,6 @@ export async function aiInterviewTurn(
       ? [{ role: "user", content: "(Le candidat entre dans la salle et s'assoit.)" }]
       : history,
   });
-  return textOf(resp);
 }
 
 // ─── Débrief final de l'entretien live ──────────────────────────────────────
@@ -257,7 +309,7 @@ export async function aiInterviewDebrief(
     .map((m) => `${m.role === "assistant" ? "INTERVIEWER" : "CANDIDAT"} : ${m.content}`)
     .join("\n\n");
 
-  const resp = await (await client()).messages.create({
+  const raw = await ask({
     model: model(),
     max_tokens: 2048,
     thinking: { type: "adaptive" },
@@ -266,5 +318,5 @@ export async function aiInterviewDebrief(
     messages: [{ role: "user", content: `Transcript de l'entretien :\n\n${transcript}\n\nRédige ton évaluation.` }],
   });
 
-  return JSON.parse(textOf(resp)) as InterviewDebrief;
+  return JSON.parse(raw) as InterviewDebrief;
 }
