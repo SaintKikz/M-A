@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { useProgress, levelFor, readinessScore, topicScore, weaknesses, daysUntil } from "../store/progress";
+import { useProgress, levelFor, readinessScore, topicScore, weaknesses, daysUntil, deskReadyScore } from "../store/progress";
+import { SkillRadar } from "../components/Radar";
 import { nextStep, recommendations, fixLinkForTag, coverage } from "../lib/coach";
 import { Card, Stat, Progress, PageTitle, Tag, Btn } from "../components/ui";
 import { MODULES, BOSSES, PLAN } from "../data/curriculum";
@@ -23,6 +24,8 @@ export default function Dashboard() {
   const s = useProgress();
   const lvl = levelFor(s.xp);
   const ready = readinessScore(s);
+  const deskReady = deskReadyScore(s.skillScores);
+  const dueMistakes = s.mistakes.filter((m) => !m.retried).length;
   const weak = weaknesses(s.tagErrors);
   const days = daysUntil(DEADLINE);
   const step = nextStep(s);
@@ -52,10 +55,41 @@ export default function Dashboard() {
       </Link>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <Stat label="M&A Readiness" value={`${ready}%`} accent={ready >= 75 ? "var(--color-green)" : ready >= 40 ? "var(--color-gold)" : "var(--color-red)"} sub={ready >= 75 ? "Prêt pour les entretiens" : ready >= 40 ? "En bonne voie" : "Continue à t'entraîner"} />
+        <Stat label="Desk Ready Score" value={deskReady !== null ? `${deskReady}%` : `${ready}%`}
+          accent={(deskReady ?? ready) >= 75 ? "var(--color-green)" : (deskReady ?? ready) >= 40 ? "var(--color-gold)" : "var(--color-red)"}
+          sub={deskReady === null ? "Fais le diagnostic pour le calibrer" : (deskReady >= 75 ? "Prêt pour les entretiens" : deskReady >= 40 ? "En bonne voie" : "Continue à t'entraîner")} />
         <Stat label="Streak" value={<span>🔥 {s.streak}</span>} sub={`Record : ${s.bestStreak} jours`} />
         <Stat label="XP" value={s.xp} sub={`Niv. ${lvl.index} — ${lvl.name}`} />
         <Stat label="Boss vaincus" value={`${bossesPassed}/${BOSSES.length}`} sub={`${s.badges.length} badges · ${(s.studyMinutes / 60).toFixed(1)}h d'étude`} />
+      </div>
+
+      {/* ═══ Compétences + actions rapides ═══ */}
+      <div className="grid md:grid-cols-[auto_1fr] gap-4 mb-6">
+        <Card className="!p-4 flex flex-col items-center justify-center">
+          <div className="text-[11px] uppercase tracking-wider text-muted font-semibold mb-1">Radar de compétences</div>
+          <SkillRadar scores={s.skillScores} size={240} />
+          {!s.diagnosticDone && (
+            <Link to="/diagnostic" className="text-xs font-bold text-accent hover:underline mt-2">Passer le diagnostic →</Link>
+          )}
+        </Card>
+        <div className="grid grid-cols-2 gap-2 content-start">
+          {[
+            { to: "/drill", emoji: "⚡", label: "Daily Drill", sub: "10 min" },
+            { to: "/analystday", emoji: "🌆", label: "Analyst Day", sub: "Simulation" },
+            { to: "/tools", emoji: "🧮", label: "Calculateurs", sub: "DCF, LBO, merger" },
+            { to: "/excel", emoji: "🟩", label: "Excel Lab", sub: `Record ${s.arcade.best} pts` },
+            { to: "/mistakes", emoji: "📓", label: "Mistake Book", sub: dueMistakes > 0 ? `${dueMistakes} à revoir` : "À jour" },
+            { to: "/screening", emoji: "🎯", label: "Buyer screening", sub: "Tri d'acheteurs" },
+          ].map((a) => (
+            <Link key={a.to} to={a.to}>
+              <Card className="!p-3.5 h-full hover:border-accent/60">
+                <div className="text-lg">{a.emoji}</div>
+                <div className="font-bold text-sm mt-0.5">{a.label}</div>
+                <div className={`text-[11px] mt-0.5 ${a.to === "/mistakes" && dueMistakes > 0 ? "text-red font-semibold" : "text-muted"}`}>{a.sub}</div>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* ═══ Recommandations dynamiques du coach ═══ */}

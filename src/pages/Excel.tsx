@@ -25,12 +25,12 @@ function Reference() {
       </div>
       <div className="grid md:grid-cols-2 gap-2">
         {list.map((sc) => (
-          <div key={sc.id} className="flex items-center justify-between gap-3 bg-surface border border-border rounded-xl px-4 py-2.5">
-            <div className="min-w-0">
+          <div key={sc.id} className="flex items-center justify-between gap-3 min-w-0 bg-surface border border-border rounded-xl px-4 py-2.5">
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">{sc.action}</div>
               {sc.why && <div className="text-[11px] text-muted truncate">{sc.why}</div>}
             </div>
-            <kbd className="shrink-0 bg-surface2 border border-border rounded-lg px-2.5 py-1 text-xs font-bold text-accent whitespace-nowrap">{os === "win" ? sc.win : sc.mac}</kbd>
+            <kbd className="shrink-0 max-w-[45%] bg-surface2 border border-border rounded-lg px-2.5 py-1 text-xs font-bold text-accent text-right">{os === "win" ? sc.win : sc.mac}</kbd>
           </div>
         ))}
       </div>
@@ -177,7 +177,7 @@ function Formulas() {
         <Card key={f.name} className="!p-4">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-sm">{f.name}</span>
-            <code className="text-[11px] bg-surface2 border border-border rounded px-2 py-0.5 text-accent">{f.syntax}</code>
+            <code className="text-[11px] bg-surface2 border border-border rounded px-2 py-0.5 text-accent break-all">{f.syntax}</code>
           </div>
           <p className="text-xs text-muted mt-1.5 leading-relaxed">{f.use}</p>
         </Card>

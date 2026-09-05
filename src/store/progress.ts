@@ -86,6 +86,9 @@ export function levelFor(xp: number) {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+/** Clé localStorage de la progression — utilisée par l'export/import des Paramètres. */
+export const PROGRESS_STORAGE_KEY = "ma-training-lab-v1";
+
 interface ProgressState {
   xp: number;
   streak: number;
@@ -292,7 +295,7 @@ export const useProgress = create<ProgressState>()(
 
       reset: () => set(initial),
     }),
-    { name: "ma-training-lab-v1" }
+    { name: PROGRESS_STORAGE_KEY }
   )
 );
 
