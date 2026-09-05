@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BANK, BANK_CATEGORIES } from "../data";
 import { useProgress } from "../store/progress";
 import { Card, PageTitle, Tag, Btn, diffLabel, diffColor } from "../components/ui";
@@ -67,7 +68,8 @@ function BankCard({ q }: { q: BankQuestion }) {
 export default function RedBook() {
   const [cat, setCat] = useState<string>("Toutes");
   const [freq, setFreq] = useState<string>("Toutes");
-  const [search, setSearch] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(params.get("q") ?? "");
   const [weakOnly, setWeakOnly] = useState(false);
   const { weakQuestions } = useProgress();
 

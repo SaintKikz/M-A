@@ -95,7 +95,7 @@ export default function BossPage() {
 
       {phase === "quiz" && (
         <Card>
-          <QuizRunner items={items} title="Boss" onFinish={(sc) => { setQuizScore(sc); setPhase("written"); window.scrollTo(0, 0); }} />
+          <QuizRunner items={items} title="Boss" source="boss" onFinish={(sc) => { setQuizScore(sc); setPhase("written"); window.scrollTo(0, 0); }} />
         </Card>
       )}
 

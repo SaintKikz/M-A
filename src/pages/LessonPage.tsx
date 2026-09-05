@@ -59,13 +59,13 @@ export default function LessonPage() {
         {step.type === "challenge" && (
           <>
             <Tag color="gold">⚡ Challenge d'entrée</Tag>
-            <div className="mt-3"><QuizCard key={step.quizId} item={quizById[step.quizId]} onDone={() => setStepDone(true)} /></div>
+            <div className="mt-3"><QuizCard key={step.quizId} item={quizById[step.quizId]} source="lesson" onDone={() => setStepDone(true)} /></div>
           </>
         )}
         {step.type === "practice" && (
           <>
             <Tag color="accent">🏋️ Exercice</Tag>
-            <div className="mt-3"><QuizCard key={step.quizId} item={quizById[step.quizId]} onDone={() => setStepDone(true)} /></div>
+            <div className="mt-3"><QuizCard key={step.quizId} item={quizById[step.quizId]} source="lesson" onDone={() => setStepDone(true)} /></div>
           </>
         )}
         {step.type === "explain" && (

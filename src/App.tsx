@@ -1,41 +1,58 @@
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { useProgress, levelFor } from "./store/progress";
-import Dashboard from "./pages/Dashboard";
-import Path from "./pages/Path";
-import ModulePage from "./pages/ModulePage";
-import LessonPage from "./pages/LessonPage";
-import Drill from "./pages/Drill";
-import Desk from "./pages/Desk";
-import MissionPage from "./pages/MissionPage";
-import DealRoom from "./pages/DealRoom";
-import CasePage from "./pages/CasePage";
-import Arena from "./pages/Arena";
-import ArenaSessionPage from "./pages/ArenaSessionPage";
-import ArenaLive from "./pages/ArenaLive";
-import BossPage from "./pages/BossPage";
-import Flashcards from "./pages/Flashcards";
-import DeckPage from "./pages/DeckPage";
-import RedBook from "./pages/RedBook";
-import Glossary from "./pages/Glossary";
-import Plan from "./pages/Plan";
-import Profile from "./pages/Profile";
-import Settings from "./pages/Settings";
-import Academy from "./pages/Academy";
-import ChapterPage from "./pages/ChapterPage";
-import Resources from "./pages/Resources";
 import { Assistant } from "./components/Assistant";
+import { SearchPalette } from "./components/SearchPalette";
+
+// Le Dashboard tire tout le moteur de recommandations (et donc tout le contenu) :
+// il est chargé à la demande comme les autres routes.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+
+// Routes lourdes chargées à la demande (code-splitting)
+const Path = lazy(() => import("./pages/Path"));
+const ModulePage = lazy(() => import("./pages/ModulePage"));
+const LessonPage = lazy(() => import("./pages/LessonPage"));
+const Drill = lazy(() => import("./pages/Drill"));
+const Desk = lazy(() => import("./pages/Desk"));
+const MissionPage = lazy(() => import("./pages/MissionPage"));
+const DealRoom = lazy(() => import("./pages/DealRoom"));
+const CasePage = lazy(() => import("./pages/CasePage"));
+const Arena = lazy(() => import("./pages/Arena"));
+const ArenaSessionPage = lazy(() => import("./pages/ArenaSessionPage"));
+const ArenaLive = lazy(() => import("./pages/ArenaLive"));
+const BossPage = lazy(() => import("./pages/BossPage"));
+const Flashcards = lazy(() => import("./pages/Flashcards"));
+const DeckPage = lazy(() => import("./pages/DeckPage"));
+const RedBook = lazy(() => import("./pages/RedBook"));
+const Glossary = lazy(() => import("./pages/Glossary"));
+const Plan = lazy(() => import("./pages/Plan"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Academy = lazy(() => import("./pages/Academy"));
+const ChapterPage = lazy(() => import("./pages/ChapterPage"));
+const Resources = lazy(() => import("./pages/Resources"));
+const Tools = lazy(() => import("./pages/Tools"));
+const Excel = lazy(() => import("./pages/Excel"));
+const Mistakes = lazy(() => import("./pages/Mistakes"));
+const Diagnostic = lazy(() => import("./pages/Diagnostic"));
+const DealDocs = lazy(() => import("./pages/DealDocs"));
+const BuyerScreening = lazy(() => import("./pages/BuyerScreening"));
+const AnalystDay = lazy(() => import("./pages/AnalystDay"));
 
 const NAV = [
   { to: "/", label: "Dashboard", emoji: "📊" },
   { to: "/academy", label: "Académie", emoji: "🎓" },
   { to: "/path", label: "Interview Track", emoji: "🗺️" },
   { to: "/drill", label: "Daily Drill", emoji: "⚡" },
+  { to: "/tools", label: "Outils", emoji: "🧮" },
+  { to: "/excel", label: "Excel Lab", emoji: "🟩" },
   { to: "/desk", label: "Analyst Desk", emoji: "💼" },
   { to: "/dealroom", label: "Deal Room", emoji: "🏢" },
   { to: "/arena", label: "Interview Arena", emoji: "🎤" },
   { to: "/flashcards", label: "Flashcards", emoji: "🃏" },
   { to: "/redbook", label: "Red Book Bank", emoji: "📕" },
+  { to: "/mistakes", label: "Mistake Book", emoji: "📓" },
+  { to: "/analystday", label: "Analyst Day", emoji: "🌆" },
   { to: "/resources", label: "Ressources", emoji: "📚" },
   { to: "/glossary", label: "Glossaire", emoji: "📖" },
   { to: "/plan", label: "Plan 8 semaines", emoji: "🗓️" },
@@ -109,8 +126,17 @@ export default function App() {
       )}
 
       <main className="flex-1 min-w-0 px-4 md:px-8 py-6 md:py-8 pb-24 md:pb-8 max-w-5xl">
+        <Suspense fallback={<div className="text-muted text-sm py-12 text-center">Chargement…</div>}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/tools" element={<Tools />} />
+          <Route path="/tools/:toolId" element={<Tools />} />
+          <Route path="/excel" element={<Excel />} />
+          <Route path="/mistakes" element={<Mistakes />} />
+          <Route path="/diagnostic" element={<Diagnostic />} />
+          <Route path="/dealdocs" element={<DealDocs />} />
+          <Route path="/screening" element={<BuyerScreening />} />
+          <Route path="/analystday" element={<AnalystDay />} />
           <Route path="/academy" element={<Academy />} />
           <Route path="/academy/:chapterId" element={<ChapterPage />} />
           <Route path="/resources" element={<Resources />} />
@@ -134,10 +160,13 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
+        </Suspense>
       </main>
 
       {/* Assistant IA flottant — disponible partout */}
       <Assistant />
+      {/* Recherche globale — Cmd/Ctrl+K */}
+      <SearchPalette />
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-border grid grid-cols-5">

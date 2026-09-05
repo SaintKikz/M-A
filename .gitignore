@@ -1,0 +1,25 @@
+# Dépendances
+node_modules/
+node_modules.nosync/
+
+# Build
+dist/
+.netlify/
+
+# Cache TypeScript
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# OS / iCloud
+.DS_Store
+Icon?
+*.log
+
+# Doublons iCloud ("fichier 2.json")
+* 2.json
+* 2.ts
+* 2.tsx

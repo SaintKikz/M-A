@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { useProgress, levelFor, LEVELS, readinessScore } from "../store/progress";
+import { useProgress, levelFor, LEVELS, readinessScore, deskReadyScore, SKILLS } from "../store/progress";
+import { SkillRadar } from "../components/Radar";
 import { Card, PageTitle, Stat, Progress, Tag, Btn } from "../components/ui";
 import { MODULES, BOSSES, LESSONS } from "../data/curriculum";
 import { MISSIONS } from "../data/missions";
@@ -10,6 +11,7 @@ export default function Profile() {
   const s = useProgress();
   const lvl = levelFor(s.xp);
   const ready = readinessScore(s);
+  const deskReady = deskReadyScore(s.skillScores);
 
   const rows = [
     { label: "Micro-leçons", done: s.completedLessons.length, total: LESSONS.length },
@@ -25,10 +27,37 @@ export default function Profile() {
       <PageTitle emoji="👤" title="Profil & Progression" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <Stat label="Niveau" value={`${lvl.index}. ${lvl.name}`} sub={lvl.next ? `${s.xp}/${lvl.next} XP` : "Niveau max !"} />
-        <Stat label="Readiness" value={`${ready}%`} accent={ready >= 75 ? "var(--color-green)" : "var(--color-gold)"} />
+        <Stat label="Desk Ready" value={deskReady !== null ? `${deskReady}%` : `${ready}%`} accent={(deskReady ?? ready) >= 75 ? "var(--color-green)" : "var(--color-gold)"} />
         <Stat label="Streak actuel" value={`🔥 ${s.streak}`} sub={`Record : ${s.bestStreak}`} />
         <Stat label="Drills complétés" value={s.drillHistory.length} />
       </div>
+
+      {/* Radar des compétences */}
+      <Card className="mb-4">
+        <div className="flex flex-col md:flex-row items-center gap-6">
+          <SkillRadar scores={s.skillScores} size={260} />
+          <div className="flex-1 w-full">
+            <div className="font-bold mb-2">Compétences</div>
+            {SKILLS.map((sk) => {
+              const v = s.skillScores[sk];
+              return (
+                <div key={sk} className="flex items-center gap-3 mb-1.5">
+                  <span className="text-xs text-muted w-24 shrink-0">{sk}</span>
+                  <div className="flex-1 h-1.5 bg-surface2 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all"
+                      style={{ width: `${v?.n ? Math.round(v.score) : 0}%`,
+                               background: !v?.n ? "var(--color-border)" : v.score >= 70 ? "var(--color-green)" : v.score >= 45 ? "var(--color-gold)" : "var(--color-red)" }} />
+                  </div>
+                  <span className="text-xs font-mono w-10 text-right shrink-0">{v?.n ? Math.round(v.score) : "—"}</span>
+                </div>
+              );
+            })}
+            {!s.diagnosticDone && (
+              <Link to="/diagnostic" className="text-xs font-bold text-accent hover:underline mt-2 inline-block">Passer le diagnostic pour calibrer →</Link>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <Card className="mb-6">
         <div className="font-bold mb-3">Parcours de niveaux</div>

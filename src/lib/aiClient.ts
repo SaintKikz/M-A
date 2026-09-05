@@ -5,7 +5,15 @@
 // visitant la page pourrait voler la clé. Pour un déploiement, passe par un
 // petit proxy backend (Cloudflare Worker / Vercel Function) qui garde la clé.
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+
+// Le SDK n'est chargé qu'au premier appel réel : il pèse ~500 kB et la grande
+// majorité des sessions n'utilisent jamais le Coach IA.
+let sdk: typeof import("@anthropic-ai/sdk") | null = null;
+async function loadSdk() {
+  if (!sdk) sdk = await import("@anthropic-ai/sdk");
+  return sdk;
+}
 import type { GradeResult } from "./grader";
 
 export interface AiConfig {
@@ -41,10 +49,11 @@ export function aiEnabled(): boolean {
   return getAiConfig() !== null;
 }
 
-function client(): Anthropic {
+async function client(): Promise<Anthropic> {
   const cfg = getAiConfig();
   if (!cfg) throw new Error("Coach IA non configuré. Ajoute ta clé API dans Profil → Coach IA.");
-  return new Anthropic({ apiKey: cfg.apiKey, dangerouslyAllowBrowser: true });
+  const { default: Ctor } = await loadSdk();
+  return new Ctor({ apiKey: cfg.apiKey, dangerouslyAllowBrowser: true });
 }
 
 function model(): string {
@@ -59,15 +68,16 @@ function textOf(response: Anthropic.Message): string {
 /** Test de connexion : renvoie null si OK, sinon le message d'erreur. */
 export async function aiTest(): Promise<string | null> {
   try {
-    const resp = await client().messages.create({
+    const resp = await (await client()).messages.create({
       model: model(),
       max_tokens: 64,
       messages: [{ role: "user", content: "Réponds uniquement : OK" }],
     });
     return textOf(resp).includes("OK") ? null : "Réponse inattendue de l'API.";
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) return "Clé API invalide.";
-    if (e instanceof Anthropic.APIError) return `Erreur API (${e.status}) : ${e.message}`;
+    const err = e as { status?: number; message?: string };
+    if (err?.status === 401) return "Clé API invalide.";
+    if (typeof err?.status === "number") return `Erreur API (${err.status}) : ${err.message ?? ""}`;
     return e instanceof Error ? e.message : "Erreur inconnue.";
   }
 }
@@ -110,7 +120,7 @@ export async function aiGradeAnswer(
     "Évalue cette réponse.",
   ].filter(Boolean).join("\n\n");
 
-  const resp = await client().messages.create({
+  const resp = await (await client()).messages.create({
     model: model(),
     max_tokens: 2048,
     system: GRADER_SYSTEM,
@@ -155,7 +165,7 @@ export async function aiAssistantReply(
   pageContext: string,
   onDelta: (text: string) => void
 ): Promise<string> {
-  const stream = client().messages.stream({
+  const stream = (await client()).messages.stream({
     model: model(),
     max_tokens: 1500,
     system: pageContext
@@ -170,7 +180,7 @@ export async function aiAssistantReply(
 
 // ─── « Explique-moi autrement » (Académie) ──────────────────────────────────
 export async function aiExplain(concept: string, currentExplanation: string): Promise<string> {
-  const resp = await client().messages.create({
+  const resp = await (await client()).messages.create({
     model: model(),
     max_tokens: 1024,
     system: "Tu es un professeur de finance exceptionnel, spécialiste de la vulgarisation pour étudiants qui préparent des stages en M&A. On te donne un concept et l'explication qui n'a pas suffi. Ta mission : expliquer AUTREMENT — angle différent, nouvelle analogie de la vie quotidienne, exemple chiffré ultra-simple. Maximum 150 mots, en français, ton chaleureux et direct. Ne répète pas l'explication d'origine.",
@@ -205,7 +215,7 @@ export async function aiInterviewTurn(
   persona: string,
   focus: string
 ): Promise<string> {
-  const resp = await client().messages.create({
+  const resp = await (await client()).messages.create({
     model: model(),
     max_tokens: 1024,
     thinking: { type: "adaptive" },
@@ -247,7 +257,7 @@ export async function aiInterviewDebrief(
     .map((m) => `${m.role === "assistant" ? "INTERVIEWER" : "CANDIDAT"} : ${m.content}`)
     .join("\n\n");
 
-  const resp = await client().messages.create({
+  const resp = await (await client()).messages.create({
     model: model(),
     max_tokens: 2048,
     thinking: { type: "adaptive" },
