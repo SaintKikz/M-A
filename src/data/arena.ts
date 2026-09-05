@@ -1,0 +1,273 @@
+import type { ArenaSession } from "../lib/types";
+
+// Sessions d'entretien scriptées. Le scoring est heuristique (mots-clés, concision,
+// détection de bullshit) — architecture prête pour brancher une vraie API IA (voir lib/grader.ts).
+export const ARENA_SESSIONS: ArenaSession[] = [
+  {
+    id: "ar1", title: "Fit Interview — Premier tour RH", interviewer: "Claire, HR Business Partner", mode: "fit", difficulty: 1, xp: 60,
+    persona: "Bienveillante mais très attentive à la cohérence de ton parcours et à ta motivation réelle. Elle a vu 200 candidats ce mois-ci.",
+    turns: [
+      {
+        question: "Bonjour ! Installez-vous. Pour commencer : présentez-vous en deux minutes.",
+        keywords: ["étud|école|master|université", "expérience|stage|projet", "m&a|finance|banque", "pourquoi|motivation|aujourd'hui"],
+        idealLengthWords: [120, 250],
+        modelAnswer: "Structure gagnante : (1) situation actuelle en une phrase (école, spécialisation), (2) 2-3 expériences racontées comme un fil rouge qui mène à la finance — chaque étape explique la suivante, (3) conclusion : « c'est ce qui m'amène ici : je veux faire du M&A et votre équipe est exactement l'environnement que je cherche ». Le tout en 90-120 secondes, sans réciter.",
+        followUp: "Intéressant. Et concrètement, qu'est-ce qui a déclenché votre intérêt pour le M&A — un moment précis ?",
+      },
+      {
+        question: "Pourquoi la banque d'affaires, et pas le conseil en stratégie ? Vous avez le profil pour les deux.",
+        keywords: ["transaction|deal|concret|aboutit", "chiffre|valorisation|financ|analyse", "rythme|intensité|apprentissage", "exécution"],
+        idealLengthWords: [60, 150],
+        modelAnswer: "« Les deux métiers analysent des décisions stratégiques, mais la banque les EXÉCUTE : un deal se signe, un prix se paie, l'analyse s'engage. C'est cette responsabilité du chiffre qui m'attire — en M&A, ma valorisation devient un prix réel. Et j'ai vérifié cet attrait : [preuve : cours de corporate finance, deal suivi, stage]. »",
+        followUp: "Vous savez que les horaires sont difficiles. Qu'est-ce qui me prouve que vous tiendrez ?",
+      },
+      {
+        question: "Parlez-moi d'un échec. Un vrai.",
+        keywords: ["situation|contexte", "responsabilité|ma faute|j'ai", "appris|changé|depuis", "exemple|preuve"],
+        redFlags: ["perfectionniste", "trop travaillé", "pas vraiment un échec", "grâce à cet échec on a gagné"],
+        idealLengthWords: [80, 180],
+        modelAnswer: "STAR sur un VRAI échec : situation, ce que tu devais faire, ce qui a raté PAR TA FAUTE (assume clairement), et le changement de comportement concret depuis — avec la preuve que ça ne s'est pas reproduit. L'accountability est exactement ce qui est testé : un stagiaire qui assume ses erreurs est un stagiaire à qui on peut confier des choses.",
+        followUp: "Et qu'est-ce que vos coéquipiers de l'époque diraient de votre réaction ?",
+      },
+      {
+        question: "Pourquoi notre banque précisément ? Vous postulez partout, soyons honnêtes.",
+        keywords: ["deal|transaction|mandat", "rencontr|échangé|contact", "équipe|bureau|secteur", "spécifique|précis"],
+        redFlags: ["prestige", "meilleure banque du monde", "leader mondial"],
+        idealLengthWords: [60, 150],
+        modelAnswer: "Assumer la transparence PUIS différencier : « Je postule effectivement aux équipes M&A comparables — c'est le métier que je veux. Votre bureau est en tête de ma liste pour trois raisons précises : [deal récent du bureau], [personne rencontrée + ce qu'elle a dit], [élément structurel : taille d'équipe, exposition sectorielle, responsabilités des juniors]. »",
+        clarifyOk: false,
+      },
+      {
+        question: "Dernière question : dans 30 secondes je dois vous « vendre » au desk. Donnez-moi mes arguments.",
+        keywords: ["rigueur|fiable|analytique", "capacité de travail|endurance|rythme", "préparé|technique", "motivation|envie"],
+        idealLengthWords: [40, 100],
+        modelAnswer: "« Trois arguments : je suis techniquement prêt — j'ai travaillé la valorisation et je peux le prouver en entretien technique ; j'ai démontré ma capacité de travail [preuve courte] ; et je veux CE bureau en connaissance de cause — j'ai rencontré l'équipe et je sais ce qui m'attend. Vous ne prendrez pas de risque avec moi. »",
+      },
+    ],
+  },
+  {
+    id: "ar2", title: "Technical Drill — L'Analyste teste tes bases", interviewer: "Hugo, Analyst 2", mode: "technical", difficulty: 2, xp: 80,
+    persona: "Il a passé les mêmes entretiens il y a deux ans. Questions rapides, il veut des réponses structurées et JUSTES. Pas de blabla.",
+    turns: [
+      {
+        question: "Walk me through the three financial statements — 45 secondes max.",
+        english: true,
+        keywords: ["income statement|compte de résultat", "balance sheet|bilan", "cash flow", "net income|résultat net", "période|instant|photo"],
+        idealLengthWords: [50, 120],
+        modelAnswer: "\"The income statement shows profitability over a period, from revenue down to net income. The balance sheet is a snapshot: assets equal liabilities plus equity. The cash flow statement reconciles net income to actual cash through operations, investing and financing. They connect: net income flows into both the cash flow statement and retained earnings, and the ending cash ties to the balance sheet.\"",
+        followUp: "Bien. Et si je ne peux en choisir qu'un pour évaluer la santé d'une boîte ?",
+      },
+      {
+        question: "Depreciation augmente de 10 €, taux d'impôt 25%. Déroule-moi l'impact sur les trois états.",
+        keywords: ["7,5|7.5|net income", "non-cash|réintégr", "2,5|2.5|cash", "pp&e|bilan|equity|retained"],
+        idealLengthWords: [50, 130],
+        modelAnswer: "« IS : EBIT −10, impôt −2,5, net income −7,5. CFS : je pars de −7,5, je réintègre +10 de D&A non-cash → cash +2,5. Bilan : PP&E −10 et cash +2,5 côté actif = −7,5 ; retained earnings −7,5 côté passif. Ça balance. » Réflexe : toujours finir par l'équilibre du bilan.",
+        followUp: "OK. Pourquoi le cash AUGMENTE alors qu'on a une charge en plus ?",
+      },
+      {
+        question: "Enterprise Value vs Equity Value : définis, relie, et dis-moi quel multiple va avec quoi.",
+        keywords: ["opération|tous les investisseurs", "actionnaires", "dette nette|net debt", "ebitda.*ev|ev.*ebitda", "p/e|net income.*equity"],
+        idealLengthWords: [60, 140],
+        modelAnswer: "« L'EV valorise les opérations pour tous les pourvoyeurs de capitaux ; l'equity value est la part des seuls actionnaires. EV = equity + dette nette (+ minoritaires + preferred). Cohérence des multiples : l'EV se compare aux métriques AVANT intérêts (revenue, EBITDA, EBIT) ; l'equity aux métriques APRÈS (net income → P/E). Mélanger les deux — comme EV/net income — est incohérent. »",
+      },
+      {
+        question: "Une société lève 200 de dette et laisse le cash au bilan. Que deviennent l'EV et l'equity value ?",
+        keywords: ["inchangé|ne change pas|rien", "compense|dette.*cash|cash.*dette", "opération"],
+        idealLengthWords: [30, 90],
+        modelAnswer: "« Rien ne change : la dette +200 et le cash +200 se compensent dans la dette nette, donc l'EV est stable — logique, les opérations n'ont pas changé. L'equity value ne bouge pas non plus. L'EV ne bougerait que si le cash était investi dans les opérations. » Piège classique — la réponse tient en trois phrases.",
+        followUp: "Et si elle utilise ces 200 pour racheter ses propres actions ?",
+      },
+      {
+        question: "Walk me through a DCF. Tu as 90 secondes.",
+        english: true,
+        keywords: ["ufcf|unlevered|free cash flow", "wacc", "terminal", "actualis|discount|present value", "bridge|equity|dette nette", "sensibilit"],
+        idealLengthWords: [80, 180],
+        modelAnswer: "\"I project unlevered free cash flows for 5 to 10 years: EBIT times one minus tax, plus D&A, minus capex, minus the increase in working capital. I estimate a terminal value, either Gordon Growth with 2-3% or an exit multiple, and sanity-check one against the other. I discount everything at the WACC to get enterprise value, subtract net debt and minorities to get equity value, divide by diluted shares for the implied price, and run sensitivities on WACC and growth.\"",
+      },
+      {
+        question: "Dernière : pourquoi deux boîtes identiques opérationnellement peuvent-elles avoir des P/E différents ?",
+        keywords: ["levier|dette|structure de capital", "intérêts|net income", "risque"],
+        idealLengthWords: [40, 100],
+        modelAnswer: "« Le P/E dépend de la structure de capital : la plus endettée a des intérêts qui réduisent son net income, et un risque equity supérieur — son P/E diffère alors que l'EV/EBITDA des deux est identique. C'est exactement pourquoi on préfère les multiples d'EV pour comparer des opérations. » (Bonus : fiscalité et éléments exceptionnels jouent aussi.)",
+      },
+    ],
+  },
+  {
+    id: "ar3", title: "Valuation Deep Dive — L'Associate creuse", interviewer: "Sarah, Associate", mode: "technical", difficulty: 3, xp: 100,
+    persona: "Ex-analyste top-bucket. Elle pose une question simple puis creuse jusqu'à trouver la limite de ta compréhension. Chaque réponse appelle un « pourquoi ».",
+    turns: [
+      {
+        question: "Vos trois méthodes de valorisation donnent : comps 800 M€, precedents 950 M€, DCF 1 100 M€. Qu'est-ce que vous racontez au client ?",
+        keywords: ["prime de contrôle|synergies", "hypothèses|sensibilit", "fourchette|triangul|football field", "contexte|pourquoi"],
+        idealLengthWords: [70, 160],
+        modelAnswer: "« La hiérarchie est cohérente : les comps donnent la valeur de marché minoritaire, les precedents ajoutent la prime de contrôle, et le DCF au-dessus suggère soit des hypothèses généreuses (à stress-tester en priorité), soit un marché qui sous-valorise le plan. Je présenterais un football field : fourchette de négociation 850-1 000, en expliquant que le DCF à 1 100 n'est défendable que si le client assume publiquement son business plan face aux acheteurs. »",
+        followUp: "Votre DCF est donc « trop haut » ? Quelles hypothèses je challenge en premier ?",
+      },
+      {
+        question: "Justement : dans un DCF, qu'est-ce qui a le plus d'impact — 50 bps de WACC ou 50 bps de croissance terminale ?",
+        keywords: ["terminal|tv", "wacc − g|wacc-g|dénominateur|écart", "sensib|les deux|proche"],
+        idealLengthWords: [50, 130],
+        modelAnswer: "« Les deux jouent sur le même dénominateur (WACC − g) de la terminal value, donc l'ordre de grandeur est comparable — mais le WACC frappe DOUBLE : il actualise aussi tous les flux explicites et la TV elle-même. À 50 bps égaux, le WACC a donc l'impact le plus fort. C'est pour ça que la matrice de sensibilité croise toujours les deux. » Si tu ne sais pas : raisonner à voix haute sur la formule vaut mieux que deviner.",
+        clarifyOk: true,
+      },
+      {
+        question: "Vous devez valoriser une société qui perd de l'argent au niveau EBITDA. Le client attend un chiffre. Faites.",
+        keywords: ["revenue|sales|gross profit", "forward|breakeven|normalis", "dcf|long terme|horizon", "secteur|arr|cohorte"],
+        idealLengthWords: [70, 160],
+        modelAnswer: "« Trois approches combinées : (1) multiples de revenue ou de gross profit vs pairs, en ajustant pour la trajectoire de marge ; (2) multiples FORWARD sur l'année de profitabilité normalisée, réactualisés à aujourd'hui ; (3) DCF à horizon long avec convergence explicite des marges vers le niveau des pairs matures. Et selon le secteur, les métriques spécifiques : EV/ARR pour un SaaS, valeur par utilisateur… Le chiffre final est une fourchette triangulée, avec les hypothèses de marge cible en évidence. »",
+      },
+      {
+        question: "Pourquoi ajoute-t-on les minoritaires dans l'EV ? Et ne me récitez pas — expliquez comme à un client.",
+        keywords: ["consolid|100%", "ebitda", "cohéren|périmètre|même", "filiale"],
+        idealLengthWords: [50, 130],
+        modelAnswer: "« Quand vous contrôlez une filiale à 80%, vos comptes consolident 100% de son EBITDA — y compris les 20% qui ne vous appartiennent pas. Si mon multiple compare l'EV à cet EBITDA de 100%, l'EV doit aussi représenter 100% du périmètre : j'ajoute donc la valeur des 20% des minoritaires. Sinon je divise une valeur de 80% par des profits de 100% — le multiple serait artificiellement bas. »",
+      },
+      {
+        question: "Un client vous dit : « Votre WACC de 9% est trop haut, mettez 7%, la valo sera meilleure. » Réponse ?",
+        keywords: ["justifi|méthodo|capm|beta|marché", "intégrité|crédib|défendable", "sensibilité|fourchette", "diplomat"],
+        redFlags: ["ok je change", "pas grave", "comme vous voulez"],
+        idealLengthWords: [60, 150],
+        modelAnswer: "« Le WACC n'est pas un curseur d'affichage : il sort des données de marché — beta des comparables, structure de capital, coût de la dette actuel. Le baisser sans justification rendrait la valorisation indéfendable en due diligence, ce qui dessert le client. Ce que je propose : montrer la SENSIBILITÉ (la valo à 8, 9 et 10%), et si le client croit à un risque plus faible, documenter pourquoi (visibilité des revenus, désendettement). On peut défendre une fourchette — pas un chiffre de complaisance. »",
+      },
+    ],
+  },
+  {
+    id: "ar4", title: "Deal Discussion — Le VP parle marché", interviewer: "Mehdi, VP", mode: "deal", difficulty: 3, xp: 100,
+    persona: "Il enchaîne les deals et lit tout. Il teste si tu suis VRAIMENT le marché ou si tu récites une fiche apprise hier soir.",
+    turns: [
+      {
+        question: "Parlez-moi d'un deal récent qui vous a marqué. Je veux les chiffres.",
+        keywords: ["acquéreur|buyer", "cible|target", "milliard|million|prix|€|\\$", "multiple|ebitda|prime|premium", "rationale|synergie"],
+        idealLengthWords: [100, 220],
+        modelAnswer: "Framework en 5 temps, 2 minutes : (1) faits — « X a annoncé le rachat de Y pour Z Md€ en [cash/titres], soit [multiple] et une prime de [%] » ; (2) rationale stratégique en 2 points concrets ; (3) lecture valo — le multiple vs comps du secteur, la prime vs les précédents ; (4) risques — antitrust, intégration, financement ; (5) TON avis tranché. Si tu n'as pas les chiffres, tu n'as pas préparé le deal : choisis-en un et apprends-le à fond.",
+        followUp: "Vous auriez conseillé l'acheteur d'y aller à ce prix, vous ?",
+      },
+      {
+        question: "Le marché M&A en ce moment : donnez-moi votre lecture en 90 secondes.",
+        keywords: ["taux|rates|financement", "volume|activité", "secteur|tech|énergie|santé", "pe|private equity|dry powder", "valorisation|multiple"],
+        idealLengthWords: [80, 200],
+        modelAnswer: "Structure attendue : (1) où en sont les volumes vs l'an dernier (ordre de grandeur) ; (2) les moteurs/freins — coût du financement, écart de valorisation acheteurs/vendeurs, dry powder du PE, pression réglementaire ; (3) les secteurs actifs (énergie/transition, tech consolidation, santé…) ; (4) ta lecture des 6 prochains mois. Mets à jour ces données CHAQUE SEMAINE de la saison des entretiens — ce sont 15 minutes de lecture par jour.",
+      },
+      {
+        question: "Si les taux baissent de 100 bps dans les 12 prochains mois, qu'est-ce que ça change concrètement pour notre desk ?",
+        keywords: ["financement|dette moins ch|coût", "lbo|sponsor|pe", "valorisation|dcf|wacc|multiple", "volume|pipeline|process"],
+        idealLengthWords: [60, 160],
+        modelAnswer: "« Trois effets en chaîne : (1) le financement d'acquisition redevient moins cher → les sponsors reviennent avec des prix plus agressifs, les process compétitifs se rouvrent ; (2) les WACC baissent → les valorisations DCF remontent, l'écart acheteur-vendeur se resserre — c'est souvent LE déclencheur des deals gelés ; (3) pour le desk : plus de pitchs sell-side (les vendeurs sortent quand les prix remontent) et des dual tracks IPO/M&A réactivés. »",
+      },
+      {
+        question: "Un client industriel vous demande s'il doit vendre maintenant ou attendre 18 mois. Il n'y a pas de bonne réponse — je veux votre raisonnement.",
+        keywords: ["cycle|fenêtre|conditions", "spécifique|actif|performance|croissance", "risque|incertitude|retourne", "process|préparation|dépend"],
+        idealLengthWords: [80, 180],
+        modelAnswer: "« Je structurerais en trois questions : (1) L'ACTIF : ses 18 prochains mois amélioreront-ils l'equity story (croissance à prouver, contrat à signer) ou l'exposeront-ils (pic de cycle, dépendance) ? On vend quand la trajectoire est démontrée mais pas épuisée. (2) Le MARCHÉ : fenêtre de financement, appétit des acheteurs du secteur — une fenêtre ouverte vaut plus qu'un pic espéré. (3) Le VENDEUR : contrainte de liquidité, appétit au risque. Puis je chiffre les deux scénarios, avec ce que 18 mois de risque d'exécution coûtent en décote. La réponse est un arbitrage documenté, pas une prédiction. »",
+        clarifyOk: true,
+      },
+    ],
+  },
+  {
+    id: "ar5", title: "Don't Bullshit Mode — Le Stress Interviewer", interviewer: "Alexandre, Executive Director", mode: "bullshit", difficulty: 4, xp: 120,
+    persona: "Réputé pour faire craquer les candidats. Questions ambiguës, pièges, silences. Il ne cherche pas la bonne réponse : il cherche comment tu te comportes quand tu ne l'as pas.",
+    turns: [
+      {
+        question: "How would you value a bank?",
+        english: true,
+        keywords: ["dette|debt.*opérat|matière première|core business", "ddm|dividend", "p/e|p/tbv|book", "pas.*ev|no.*ev|ni ev|jamais ev|roe"],
+        redFlags: ["ev/ebitda", "dcf classique|standard dcf|ufcf"],
+        idealLengthWords: [50, 140],
+        modelAnswer: "« Pas avec les outils classiques : pour une banque, la dette EST l'outil de production — impossible de séparer opérations et financement, donc ni EV, ni EBITDA, ni UFCF. On valorise l'equity directement : Dividend Discount Model sous contrainte de capital réglementaire, P/E, et P/TBV lu contre le ROE. » Si tu ne savais pas : « Je n'ai jamais valorisé de banque, mais je sais que les métriques d'EV ne s'appliquent pas car la dette est opérationnelle — je raisonnerais sur l'equity directement. » Honnête ET structuré.",
+        clarifyOk: true,
+      },
+      {
+        question: "EBITDA ou cash flow opérationnel : lequel est le plus élevé ?",
+        keywords: ["ça dépend|dépend", "impôt|intérêt|nwc|working capital", "deferred|non-cash|sens inverse|deux sens"],
+        redFlags: ["toujours l'ebitda", "toujours le cash flow"],
+        idealLengthWords: [40, 120],
+        modelAnswer: "« Ça dépend — et c'est le piège. L'EBITDA est souvent plus élevé : le CFO subit impôts, intérêts payés et hausses de NWC. Mais le CFO peut dépasser l'EBITDA : deferred revenue encaissée, baisse du NWC, autres add-backs non-cash. La seule bonne réponse liste les ponts dans les deux sens. » Ne JAMAIS trancher sans conditions sur une question « lequel est plus grand ».",
+        clarifyOk: true,
+      },
+      {
+        question: "Combien vaut une entreprise qui n'a ni revenus, ni actifs, ni management ?",
+        keywords: ["clarif|préciser|contexte|pourquoi", "option|potentiel|brevet|licence|nol", "zéro|rien|proche de zéro"],
+        idealLengthWords: [30, 110],
+        modelAnswer: "La bonne réaction est une QUESTION : « Qu'est-ce qu'elle possède alors — une licence, un brevet, des pertes reportables, une audience ? » Si vraiment rien : elle vaut ~zéro, voire sa valeur de coquille (cotation, NOLs). L'interviewer teste si tu oses demander une clarification au lieu d'inventer une méthode. Demander intelligemment EST la réponse.",
+        clarifyOk: true,
+      },
+      {
+        question: "Votre DCF donne 500 M€. Je vous dis que la boîte s'est vendue hier 800 M€. Qui a raison ?",
+        keywords: ["hypothèse|vérif|challenge|revoir", "synergie|prime|stratégique|acheteur spécifique", "marché|prix|contexte", "humilité|probable"],
+        redFlags: ["mon dcf a raison", "le marché se trompe"],
+        idealLengthWords: [50, 140],
+        modelAnswer: "« Le prix de 800 est un FAIT ; mon DCF est une OPINION standalone. L'écart s'explique probablement par : des synergies payées par un acheteur stratégique, une prime de compétition, ou des hypothèses trop prudentes chez moi — je rechallengerais d'abord mon modèle. Un DCF standalone n'a pas vocation à prédire un prix de deal : il mesure la valeur intrinsèque SANS acheteur spécifique. Les deux chiffres peuvent être justes en même temps. »",
+        clarifyOk: true,
+      },
+      {
+        question: "Je ne suis pas convaincu par vous. Qu'est-ce que vous ne savez PAS faire ?",
+        keywords: ["honnête|vrai|concret|assume", "apprendre|progress|plan", "exemple"],
+        redFlags: ["je sais tout faire", "aucune"],
+        idealLengthWords: [50, 130],
+        modelAnswer: "Rester calme — c'est un test de composure, pas une opinion. « Beaucoup de choses : je n'ai jamais fait tourner un merger model complet en conditions réelles, mon expérience des data rooms est nulle, et ma vitesse Excel n'est pas encore celle d'un analyste. Ce que je sais faire : apprendre vite — [preuve] — et je sais exactement ce qu'il me reste à combler. C'est précisément ce qu'un stage m'apportera. » Assumer sans s'effondrer NI se vexer.",
+      },
+      {
+        question: "Dernière chance. Convainquez-moi en 20 secondes — et pas de langue de bois.",
+        keywords: ["préparé|technique|prouv", "travail|endurance", "spécifique|votre équipe|ce bureau"],
+        redFlags: ["passionné depuis toujours", "rêve"],
+        idealLengthWords: [30, 80],
+        modelAnswer: "Court, direct, calme : « Vous cherchez quelqu'un de fiable sous pression, techniquement prêt, et qui ne s'effondre pas quand on le pousse — c'est exactement ce que je viens de démontrer pendant cet entretien. Testez-moi cet été. » Sourire. Silence. Laisse-LE reprendre la parole.",
+      },
+    ],
+  },
+  {
+    id: "ar6", title: "Final Round — Le MD décide", interviewer: "Isabelle, Managing Director", mode: "full", difficulty: 4, xp: 150,
+    persona: "30 ans de M&A. Elle ne teste plus la technique — les autres l'ont fait. Elle teste le jugement, la maturité, et si elle t'imagine devant un client dans 3 ans.",
+    turns: [
+      {
+        question: "J'ai lu votre CV dans l'ascenseur. Racontez-moi plutôt : quelle est la décision la plus difficile que vous ayez prise ?",
+        keywords: ["choix|renonc|arbitr", "critère|raison|réfléchi", "assum|conséquence", "appris"],
+        idealLengthWords: [80, 180],
+        modelAnswer: "Elle cherche la MATURITÉ du processus de décision : un vrai dilemme (deux options légitimes), les critères que tu as posés, la décision assumée avec ses coûts, et la relecture honnête. Le sujet importe moins que la qualité du raisonnement. Évite les pseudo-dilemmes (« choisir entre deux stages prestigieux »).",
+        followUp: "Et avec le recul, c'était la bonne décision ?",
+      },
+      {
+        question: "Un client me demande demain : « Faut-il vendre ma société à un fonds ou à un industriel ? » Vous êtes dans la salle. Je vous passe la parole. ",
+        keywords: ["prix|synergie|stratégique", "certitude|rapidité|exécution|financement", "projet|management|culture|suite", "dépend|critère"],
+        idealLengthWords: [80, 180],
+        modelAnswer: "« Cela dépend de trois critères à hiérarchiser avec vous : (1) le PRIX — un industriel avec synergies peut payer davantage, mais un process compétitif avec sponsors peut surprendre ; (2) la CERTITUDE — un fonds exécute vite avec un financement committed, un industriel apporte des risques antitrust et de process interne ; (3) le PROJET — gouvernance, place du management, avenir des équipes : un fonds offre souvent un second chapitre au management, un industriel intègre. Si vous me dites vos priorités entre ces trois, la réponse se dessine d'elle-même. » Structure + renvoi au client = réflexe de banquier.",
+        clarifyOk: true,
+      },
+      {
+        question: "Qu'est-ce qui vous ferait quitter ce métier dans deux ans ? Soyez honnête, j'ai entendu toutes les réponses préparées.",
+        keywords: ["honnête|lucid|connaissance de cause", "apprentissage|équipe|sens", "choix|assume"],
+        redFlags: ["rien ne me fera", "jamais"],
+        idealLengthWords: [50, 130],
+        modelAnswer: "L'honnêteté lucide bat le zèle : « Ce qui userait ma motivation, ce ne sont pas les horaires — je les choisis en connaissance de cause — ce serait de ne plus apprendre, ou une équipe où la pression remplace l'exigence. Tant que je progresse et que le travail a du sens, je tiens. C'est d'ailleurs pour ça que je choisis soigneusement l'équipe que je rejoins. » Retourne subtilement la question en compliment ciblé.",
+      },
+      {
+        question: "Vous avez une question pour moi ? Une seule. Choisissez bien.",
+        keywords: ["deal|transaction|marché|équipe", "apprend|conseil|évolution|distingue", "spécifique"],
+        redFlags: ["salaire", "horaires", "vacances", "télétravail"],
+        idealLengthWords: [15, 60],
+        modelAnswer: "Une question qui la fait PARLER de son expertise et te positionne : « Sur les mandats récents du bureau, qu'est-ce qui a fait la différence entre les deals qui se sont signés et ceux qui ont échoué ? » Ou : « Qu'est-ce que les meilleurs juniors que vous ayez vus faisaient différemment dès leurs premières semaines ? » Puis ÉCOUTE vraiment — et rebondis en une phrase.",
+      },
+    ],
+  },
+  {
+    id: "ar7", title: "Oral Answer Trainer — La question du jour", interviewer: "Coach", mode: "technical", difficulty: 2, xp: 40,
+    persona: "Mode entraînement libre : une question type entretien, tu écris ta réponse comme tu la DIRAIS à voix haute, le coach la corrige comme un recruteur. (Architecture prête pour l'input vocal.)",
+    turns: [
+      {
+        question: "Why should we hire you over the other 200 candidates? (Réponds comme à l'oral, en anglais si tu peux.)",
+        english: true,
+        keywords: ["prepared|prêt|technique", "work ethic|capacité de travail|proven|prouv", "specific|spécifique|team|équipe", "example|exemple"],
+        idealLengthWords: [60, 140],
+        modelAnswer: "\"Three reasons. First, I'm technically ready — I've drilled accounting, valuation and deal analysis for months, and you can test me right now. Second, I've proven I can sustain intensity: [one concrete example]. Third, I'm not applying to banking in general — I want this team, because [specific reason]. You won't need to take a bet on me: the preparation is already done.\" Structure en 3, preuves, spécificité, confiance sans arrogance.",
+      },
+      {
+        question: "Explique une acquisition récente à ta grand-mère en 60 secondes (vulgarisation = maîtrise).",
+        keywords: ["simple|comme si|imagine", "pourquoi|raison", "prix|cher|payé", "risque"],
+        idealLengthWords: [60, 150],
+        modelAnswer: "Test de vulgarisation : si tu ne peux pas l'expliquer simplement, tu ne l'as pas compris. Structure : « L'entreprise A achète l'entreprise B — imagine [analogie du quotidien]. Elle paie X, c'est comme payer [comparaison parlante]. Pourquoi ? Parce qu'ensemble, elles peuvent [le rationale en langage simple]. Le pari, c'est que [le risque]. » Zéro jargon : ni EBITDA, ni synergies — des mots de tous les jours.",
+      },
+    ],
+  },
+];
+
+export const arenaById = Object.fromEntries(ARENA_SESSIONS.map((a) => [a.id, a]));
