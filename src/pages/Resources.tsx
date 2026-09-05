@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PageTitle, Tag } from "../components/ui";
+import { RESOURCES, RESOURCE_CATEGORIES, type ResourceAccess } from "../data/resources";
 
 const TABS = ["Formules", "Cheat sheets", "Excel", "Checklists", "Erreurs & FAQ", "Bibliothèque"] as const;
 
@@ -158,24 +159,97 @@ const ERRORS: { err: string; fix: string }[] = [
   { err: "« Le vendeur garde le cash, donc l'EV ne change pas »", fix: "Les deals se négocient cash-free/debt-free : le mécanisme de prix (locked box / completion accounts) règle tout." },
 ];
 
-const LIBRARY: { cat: string; items: { name: string; why: string; link?: string }[] }[] = [
-  { cat: "Les références du métier", items: [
-    { name: "Rosenbaum & Pearl — Investment Banking", why: "LA bible de la valorisation et des process M&A. À lire en parallèle des niveaux 4-6." },
-    { name: "Le Red Book (Wall Street Prep)", why: "Le guide de questions d'entretien — intégré et reformulé dans ta Red Book Bank (220 questions)." },
-    { name: "Damodaran Online (NYU)", why: "Cours de valorisation gratuits du « doyen de la valo » : données ERP/beta par secteur, gratuites.", link: "https://pages.stern.nyu.edu/~adamodar/" },
-  ]},
-  { cat: "Ressources gratuites de qualité", items: [
-    { name: "Mergers & Inquisitions", why: "Carrières IB/PE : CV, networking, récits d'entretiens.", link: "https://mergersandinquisitions.com" },
-    { name: "Macabacus", why: "Tutoriels de modélisation (merger model, LBO) et conventions Excel.", link: "https://macabacus.com" },
-    { name: "Investopedia", why: "Dictionnaire financier de référence pour toute définition qui bloque.", link: "https://www.investopedia.com" },
-    { name: "Financial Times / Les Échos", why: "Ta veille deals quotidienne (15 min/jour, non négociable en saison d'entretiens)." },
-  ]},
-  { cat: "Dans cette plateforme", items: [
-    { name: "Glossaire (102 termes)", why: "Définition + version entretien EN + formule + erreur fréquente.", link: "#/glossary" },
-    { name: "Red Book Bank (220 questions)", why: "Toutes les questions d'entretien, par thème et fréquence.", link: "#/redbook" },
-    { name: "Deal Room (19 cas)", why: "12 cas d'école + 7 vrais deals célèbres analysés.", link: "#/dealroom" },
-  ]},
-];
+
+
+const ACCESS_META: Record<ResourceAccess, { label: string; color: string }> = {
+  gratuit: { label: "Gratuit", color: "green" },
+  payant: { label: "Payant", color: "gold" },
+  officiel: { label: "Source officielle", color: "purple" },
+};
+
+function Library() {
+  const [access, setAccess] = useState<string>("all");
+  const [cat, setCat] = useState<string>("all");
+
+  const shown = useMemo(() =>
+    RESOURCES.filter((r) =>
+      (access === "all" || r.access === access) &&
+      (cat === "all" || r.categories.includes(cat as never))),
+    [access, cat]);
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {["all", "gratuit", "payant", "officiel"].map((a) => (
+          <button key={a} onClick={() => setAccess(a)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${access === a ? "bg-accent/15 text-accent border-accent/40" : "border-border text-muted hover:text-ink"}`}>
+            {a === "all" ? "Tous les accès" : ACCESS_META[a as ResourceAccess].label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-5">
+        <button onClick={() => setCat("all")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${cat === "all" ? "bg-accent2/15 text-accent2 border-accent2/40" : "border-border text-muted hover:text-ink"}`}>
+          Toutes catégories
+        </button>
+        {RESOURCE_CATEGORIES.map((c) => (
+          <button key={c} onClick={() => setCat(c)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${cat === c ? "bg-accent2/15 text-accent2 border-accent2/40" : "border-border text-muted hover:text-ink"}`}>
+            {c}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        {shown.map((r) => (
+          <Card key={r.id} className="!p-4 flex flex-col">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-bold text-sm leading-snug">{r.name}</div>
+                <div className="text-[11px] text-muted mt-0.5">{r.org}</div>
+              </div>
+              <Tag color={ACCESS_META[r.access].color}>{ACCESS_META[r.access].label}</Tag>
+            </div>
+            <p className="text-xs text-muted mt-2 leading-relaxed flex-1">{r.useHere}</p>
+            <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-border">
+              <div className="flex flex-wrap gap-1">
+                {r.categories.map((c) => <span key={c} className="text-[10px] text-muted bg-surface2 rounded px-1.5 py-0.5">{c}</span>)}
+              </div>
+              {r.url
+                ? <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-xs font-bold text-accent hover:underline shrink-0">Ouvrir ↗</a>
+                : <span className="text-[10px] text-muted shrink-0">lien non vérifié</span>}
+            </div>
+            <div className="text-[10px] text-muted mt-1">Vérifié : {r.verified}</div>
+          </Card>
+        ))}
+      </div>
+      {shown.length === 0 && <p className="text-sm text-muted text-center py-8">Aucune ressource avec ces filtres.</p>}
+
+      <div className="mt-5 space-y-3">
+        <Card className="!p-4">
+          <div className="font-bold text-sm mb-2">Dans cette plateforme</div>
+          <div className="grid md:grid-cols-3 gap-2 text-xs">
+            <Link to="/glossary" className="text-accent hover:underline">Glossaire →</Link>
+            <Link to="/redbook" className="text-accent hover:underline">Red Book Bank →</Link>
+            <Link to="/dealroom" className="text-accent hover:underline">Deal Room →</Link>
+            <Link to="/tools" className="text-accent hover:underline">Calculateurs →</Link>
+            <Link to="/excel" className="text-accent hover:underline">Excel Lab →</Link>
+            <Link to="/dealdocs" className="text-accent hover:underline">Documents du deal →</Link>
+          </div>
+        </Card>
+        <Card className="border-gold/40 !p-4">
+          <p className="text-xs text-muted leading-relaxed">
+            📌 Ces références servent de <b>benchmark de curriculum</b>. Tout le contenu de cette plateforme
+            (leçons, questions, cas, sociétés fictives) est original et reformulé — rien n'est copié de ces sources.
+            Les ressources marquées « Payant » sont des programmes commerciaux tiers, signalés comme tels.
+            Le contenu réglementaire est fourni à titre pédagogique et ne constitue pas un conseil juridique :
+            vérifie toujours la source officielle et sa date de mise à jour.
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 export default function Resources() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Formules");
@@ -264,26 +338,8 @@ export default function Resources() {
         </div>
       )}
 
-      {tab === "Bibliothèque" && (
-        <div className="space-y-5">
-          {LIBRARY.map((g) => (
-            <div key={g.cat}>
-              <div className="font-bold mb-2">{g.cat}</div>
-              <div className="grid md:grid-cols-3 gap-3">
-                {g.items.map((it) => (
-                  <Card key={it.name} className="!p-4">
-                    <div className="font-semibold text-sm">{it.name} {it.link && <a href={it.link} target={it.link.startsWith("#") ? undefined : "_blank"} rel="noreferrer" className="text-accent text-xs">↗</a>}</div>
-                    <p className="text-xs text-muted mt-1">{it.why}</p>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          ))}
-          <Card className="border-gold/40 !p-4">
-            <p className="text-xs text-muted">📌 Rappel : tout le contenu de cette plateforme est original et reformulé — les références ci-dessus sont pour aller plus loin, pas des sources copiées. Les flashcards, le glossaire et la Red Book Bank couvrent déjà l'essentiel.</p>
-          </Card>
-        </div>
-      )}
+      {tab === "Bibliothèque" && <Library />}
+
     </div>
   );
 }

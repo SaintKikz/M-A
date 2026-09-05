@@ -161,7 +161,7 @@ export default function ChapterPage() {
           <p className="text-sm text-muted">Réponds à tout — chaque correction est détaillée. Score comptabilisé dans ta maîtrise du chapitre.</p>
           {quizItems.slice(0, quizDone + 1).map((q) => (
             <Card key={q.id}>
-              <QuizCard item={q} onDone={(ok) => { if (ok) setQuizRight((r) => r + 1); setQuizDone((d) => d + 1); }} />
+              <QuizCard item={q} source="chapter" onDone={(ok) => { if (ok) setQuizRight((r) => r + 1); setQuizDone((d) => d + 1); }} />
             </Card>
           ))}
           {allQuizDone && (

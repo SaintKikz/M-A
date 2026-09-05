@@ -1,21 +1,41 @@
 import { useState } from "react";
 import type { QuizItem } from "../lib/types";
 import { gradeNumeric, gradeAnswer } from "../lib/grader";
-import { useProgress } from "../store/progress";
+import { useProgress, topicToSkill, type MistakeEntry } from "../store/progress";
 import { Btn, Tag } from "./ui";
 
+export type QuizSource = MistakeEntry["source"];
+
 // Joue un item de quiz (mcq / numeric / open) en mode "tentative d'abord".
-export function QuizCard({ item, onDone }: { item: QuizItem; onDone: (correct: boolean) => void }) {
+export function QuizCard({ item, onDone, source = "other" }: { item: QuizItem; onDone: (correct: boolean) => void; source?: QuizSource }) {
   const [state, setState] = useState<"try" | "hinted" | "done">("try");
   const [picked, setPicked] = useState<number | null>(null);
   const [input, setInput] = useState("");
   const [correct, setCorrect] = useState<boolean | null>(null);
   const recordAnswer = useProgress((s) => s.recordAnswer);
+  const recordSkill = useProgress((s) => s.recordSkill);
+  const logMistake = useProgress((s) => s.logMistake);
+  const clearMistake = useProgress((s) => s.clearMistake);
 
-  const finish = (ok: boolean) => {
+  const finish = (ok: boolean, userAnswer: string) => {
     setCorrect(ok);
     setState("done");
     recordAnswer(item.topic, item.tags, ok);
+    recordSkill(topicToSkill(item.topic), ok);
+    if (!ok) {
+      const correctAnswer =
+        item.kind === "mcq" ? item.choices[item.answer]
+        : item.kind === "numeric" ? `${item.answer}${item.unit ? ` ${item.unit}` : ""}`
+        : item.modelAnswer;
+      logMistake({
+        qid: item.id, source, topic: item.topic, prompt: item.prompt,
+        userAnswer: userAnswer.slice(0, 300), correctAnswer,
+        explanation: "explanation" in item ? item.explanation : undefined,
+      });
+    } else if (source !== "other") {
+      // bonne réponse en re-test → la question sort du Mistake Book
+      clearMistake(item.id);
+    }
     onDone(ok);
   };
 
@@ -38,7 +58,7 @@ export function QuizCard({ item, onDone }: { item: QuizItem; onDone: (correct: b
             }
             return (
               <button key={i} disabled={state === "done"}
-                onClick={() => { setPicked(i); finish(i === item.answer); }}
+                onClick={() => { setPicked(i); finish(i === item.answer, c); }}
                 className={`text-left px-4 py-3 rounded-xl border text-sm transition-colors ${cls}`}>
                 <span className="font-mono text-muted mr-2">{String.fromCharCode(65 + i)}</span>{c}
               </button>
@@ -50,11 +70,11 @@ export function QuizCard({ item, onDone }: { item: QuizItem; onDone: (correct: b
       {item.kind === "numeric" && (
         <div className="flex gap-2 items-center flex-wrap">
           <input value={input} onChange={(e) => setInput(e.target.value)} disabled={state === "done"}
-            onKeyDown={(e) => e.key === "Enter" && input && state !== "done" && finish(gradeNumeric(input, item.answer, item.tolerance))}
+            onKeyDown={(e) => e.key === "Enter" && input && state !== "done" && finish(gradeNumeric(input, item.answer, item.tolerance), input)}
             placeholder="Ta réponse…" inputMode="decimal"
             className="bg-surface2 border border-border rounded-xl px-4 py-3 w-44 outline-none focus:border-accent text-lg font-mono" />
           {item.unit && <span className="text-muted">{item.unit}</span>}
-          {state !== "done" && <Btn onClick={() => input && finish(gradeNumeric(input, item.answer, item.tolerance))}>Valider</Btn>}
+          {state !== "done" && <Btn onClick={() => input && finish(gradeNumeric(input, item.answer, item.tolerance), input)}>Valider</Btn>}
         </div>
       )}
 
@@ -64,7 +84,7 @@ export function QuizCard({ item, onDone }: { item: QuizItem; onDone: (correct: b
             placeholder="Écris ta réponse comme tu la dirais en entretien…"
             className="w-full bg-surface2 border border-border rounded-xl px-4 py-3 outline-none focus:border-accent text-sm leading-relaxed" />
           <div className="mt-2">
-            <Btn onClick={() => { const g = gradeAnswer(input, item.keywords); finish(g.score >= 60); }} disabled={input.trim().length < 10}>Soumettre</Btn>
+            <Btn onClick={() => { const g = gradeAnswer(input, item.keywords); finish(g.score >= 60, input); }} disabled={input.trim().length < 10}>Soumettre</Btn>
           </div>
         </div>
       )}
@@ -82,10 +102,11 @@ export function QuizCard({ item, onDone }: { item: QuizItem; onDone: (correct: b
 }
 
 // Enchaîne une liste d'items : score final, combo de bonnes réponses, items ratés.
-export function QuizRunner({ items, onFinish, title }: {
+export function QuizRunner({ items, onFinish, title, source = "other" }: {
   items: QuizItem[];
   onFinish: (score: number, right: number, wrong?: QuizItem[], maxCombo?: number) => void;
   title?: string;
+  source?: QuizSource;
 }) {
   const [idx, setIdx] = useState(0);
   const [right, setRight] = useState(0);
@@ -109,7 +130,7 @@ export function QuizRunner({ items, onFinish, title }: {
       <div className="h-1.5 bg-surface2 rounded-full mb-6 overflow-hidden">
         <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${(idx / items.length) * 100}%` }} />
       </div>
-      <QuizCard key={item.id} item={item} onDone={(ok) => {
+      <QuizCard key={item.id} item={item} source={source} onDone={(ok) => {
         if (ok) {
           setRight((r) => r + 1);
           setCombo((c) => { const n = c + 1; setMaxCombo((m) => Math.max(m, n)); return n; });

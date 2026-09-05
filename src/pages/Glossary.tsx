@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { GLOSSARY } from "../data/glossary";
 import { useProgress } from "../store/progress";
 import { Card, PageTitle, Btn, Tag } from "../components/ui";
 
 export default function Glossary() {
-  const [search, setSearch] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(params.get("q") ?? "");
   const [openId, setOpenId] = useState<string | null>(null);
   const { addCards } = useProgress();
   const [added, setAdded] = useState<string[]>([]);

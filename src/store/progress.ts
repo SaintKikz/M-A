@@ -2,6 +2,33 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Topic } from "../lib/types";
 
+// ─── Mistake Book ───────────────────────────────────────────────────────────
+export interface MistakeEntry {
+  qid: string;              // id de la question (quiz/bank/exercice)
+  source: "drill" | "lesson" | "chapter" | "boss" | "diagnostic" | "arena" | "other";
+  topic: string;            // catégorie de regroupement
+  prompt: string;
+  userAnswer: string;
+  correctAnswer: string;
+  explanation?: string;
+  date: string;             // yyyy-mm-dd
+  retried: boolean;
+}
+
+// ─── Compétences (Desk Ready Score par skill) ───────────────────────────────
+export const SKILLS = ["Accounting", "Valuation", "DCF", "M&A", "LBO", "EV/Equity", "Process", "Excel"] as const;
+export type Skill = (typeof SKILLS)[number];
+
+export const topicToSkill = (topic: string): Skill => {
+  const map: Record<string, Skill> = {
+    accounting: "Accounting", valuation: "Valuation", comps: "Valuation", precedents: "Valuation",
+    dcf: "DCF", "mna-process": "Process", "accretion-dilution": "M&A", lbo: "LBO",
+    "capital-markets": "M&A", "deal-awareness": "Process", foundations: "Process",
+    "corp-finance": "Valuation", industry: "Valuation", behavioral: "Process",
+  };
+  return map[topic] ?? "M&A";
+};
+
 // ─── Spaced repetition (simplified SM-2) ────────────────────────────────────
 export interface SrsState {
   interval: number; // days
@@ -78,6 +105,10 @@ interface ProgressState {
   weakQuestions: string[]; // bank question ids marked as weak
   chapters: Record<string, number>; // chapterId -> best score (Académie)
   studyMinutes: number; // temps d'étude réel (app visible)
+  mistakes: MistakeEntry[]; // journal d'erreurs (Mistake Book)
+  arcade: { best: number; plays: number; history: { date: string; score: number; accuracy: number; avgMs: number }[] }; // Shortcut Arena
+  skillScores: Record<string, { score: number; n: number }>; // Desk Ready par compétence (moyenne mobile)
+  diagnosticDone: boolean;
 
   completeChapter: (id: string, score: number, xp: number) => void;
   addStudyMinutes: (n: number) => void;
@@ -93,6 +124,12 @@ interface ProgressState {
   addCards: (ids: string[]) => void;
   recordAnswer: (topic: Topic, tags: string[], correct: boolean) => void;
   toggleWeak: (id: string) => void;
+  logMistake: (m: Omit<MistakeEntry, "date" | "retried">) => void;
+  markRetried: (qid: string) => void;
+  clearMistake: (qid: string) => void;
+  recordArcade: (score: number, accuracy: number, avgMs: number) => void;
+  recordSkill: (skill: Skill, correct: boolean) => void;
+  seedSkills: (scores: Record<string, number>) => void;
   reset: () => void;
 }
 
@@ -115,6 +152,10 @@ const initial = {
   weakQuestions: [] as string[],
   chapters: {},
   studyMinutes: 0,
+  mistakes: [] as MistakeEntry[],
+  arcade: { best: 0, plays: 0, history: [] as { date: string; score: number; accuracy: number; avgMs: number }[] },
+  skillScores: {} as Record<string, { score: number; n: number }>,
+  diagnosticDone: false,
 };
 
 export const useProgress = create<ProgressState>()(
@@ -211,6 +252,44 @@ export const useProgress = create<ProgressState>()(
             : [...s.weakQuestions, id],
         })),
 
+      logMistake: (m) =>
+        set((s) => {
+          // une erreur par question : la plus récente remplace l'ancienne
+          const rest = s.mistakes.filter((e) => e.qid !== m.qid);
+          return { mistakes: [{ ...m, date: todayStr(), retried: false }, ...rest].slice(0, 300) };
+        }),
+
+      markRetried: (qid) =>
+        set((s) => ({ mistakes: s.mistakes.map((e) => (e.qid === qid ? { ...e, retried: true } : e)) })),
+
+      clearMistake: (qid) =>
+        set((s) => ({ mistakes: s.mistakes.filter((e) => e.qid !== qid) })),
+
+      recordArcade: (score, accuracy, avgMs) =>
+        set((s) => ({
+          arcade: {
+            best: Math.max(s.arcade.best, score),
+            plays: s.arcade.plays + 1,
+            history: [...s.arcade.history, { date: todayStr(), score, accuracy, avgMs }].slice(-50),
+          },
+          xp: s.xp + Math.round(score / 20),
+        })),
+
+      recordSkill: (skill, correct) =>
+        set((s) => {
+          const cur = s.skillScores[skill] ?? { score: 50, n: 0 };
+          // moyenne mobile exponentielle : chaque réponse pèse ~8%
+          const target = correct ? 100 : 0;
+          const alpha = Math.max(0.05, 0.3 / (1 + cur.n * 0.1));
+          return { skillScores: { ...s.skillScores, [skill]: { score: cur.score + alpha * (target - cur.score), n: cur.n + 1 } } };
+        }),
+
+      seedSkills: (scores) =>
+        set((s) => ({
+          diagnosticDone: true,
+          skillScores: Object.fromEntries(Object.entries(scores).map(([k, v]) => [k, { score: v, n: Math.max(3, s.skillScores[k]?.n ?? 0) }])),
+        })),
+
       reset: () => set(initial),
     }),
     { name: "ma-training-lab-v1" }
@@ -243,6 +322,15 @@ export function weaknesses(tagErrors: Record<string, number>, topN = 5): { tag: 
     .sort((a, b) => b[1] - a[1])
     .slice(0, topN)
     .map(([tag, errors]) => ({ tag, errors: Math.round(errors) }));
+}
+
+/** Desk Ready Score /100 : moyenne des compétences évaluées, pondérée par la couverture. */
+export function deskReadyScore(skillScores: Record<string, { score: number; n: number }>): number | null {
+  const entries = Object.values(skillScores).filter((s) => s.n > 0);
+  if (entries.length === 0) return null;
+  const avg = entries.reduce((a, b) => a + b.score, 0) / entries.length;
+  const coverage = Math.min(1, entries.length / SKILLS.length);
+  return Math.round(avg * (0.6 + 0.4 * coverage));
 }
 
 export function daysUntil(dateStr: string): number {

@@ -131,7 +131,7 @@ export default function Drill() {
       <div className="max-w-2xl">
         <PageTitle emoji="⚡" title="Daily Drill — Questions" />
         <Card>
-          <QuizRunner items={items} title="Drill" onFinish={(sc, _right, wrong, maxCombo) => {
+          <QuizRunner items={items} title="Drill" source="drill" onFinish={(sc, _right, wrong, maxCombo) => {
             setScore(sc);
             setWrongItems(wrong ?? []);
             setComboMax(maxCombo ?? 0);
