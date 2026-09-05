@@ -1,20 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GLOSSARY } from "../data/glossary";
-import { BANK } from "../data";
-import { LESSONS, MODULES, moduleById } from "../data/curriculum";
-import { CHAPTERS } from "../data/academy";
-import { MISSIONS } from "../data/missions";
-import { CASES } from "../data/cases";
-import { REAL_DEALS } from "../data/realdeals";
-import { EXCEL_SHORTCUTS } from "../data/excel";
 
 // ─── Recherche globale (Cmd/Ctrl+K) ────────────────────────────────────────
 interface Hit { kind: string; title: string; sub: string; to: string; keywords: string }
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-function buildIndex(): Hit[] {
+async function buildIndex(): Promise<Hit[]> {
   const hits: Hit[] = [];
   const pages: [string, string, string][] = [
     ["Dashboard", "Vue d'ensemble et prochaine session", "/"],
@@ -45,6 +37,15 @@ function buildIndex(): Hit[] {
     ["IRR ↔ MOIC", "irrmoic"], ["CAGR & prime", "quick"], ["Football field", "field"],
   ];
   for (const [title, id] of toolDefs) hits.push({ kind: "Outil", title, sub: "Calculateur", to: `/tools/${id}`, keywords: "calculateur outil" });
+  // Le contenu n'est chargé qu'à la première ouverture de la palette.
+  const [{ GLOSSARY }, { BANK }, curriculum, { CHAPTERS }, { MISSIONS }, { CASES }, { REAL_DEALS }, { EXCEL_SHORTCUTS }] =
+    await Promise.all([
+      import("../data/glossary"), import("../data"), import("../data/curriculum"),
+      import("../data/academy"), import("../data/missions"), import("../data/cases"),
+      import("../data/realdeals"), import("../data/excel"),
+    ]);
+  const { LESSONS, MODULES, moduleById } = curriculum;
+
   for (const g of GLOSSARY) hits.push({ kind: "Glossaire", title: g.term, sub: g.definition.slice(0, 90), to: `/glossary?q=${encodeURIComponent(g.term)}`, keywords: g.tags.join(" ") + " " + (g.fr ?? "") });
   for (const c of CHAPTERS) hits.push({ kind: "Académie", title: c.title, sub: c.hook.slice(0, 90), to: `/academy/${c.id}`, keywords: "" });
   for (const l of LESSONS) hits.push({ kind: "Leçon", title: l.title, sub: moduleById[l.moduleId]?.title ?? "", to: `/lesson/${l.id}`, keywords: "" });
@@ -58,11 +59,13 @@ function buildIndex(): Hit[] {
 }
 
 let INDEX: Hit[] | null = null;
+let loading: Promise<Hit[]> | null = null;
 
 export function SearchPalette() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
+  const [ready, setReady] = useState(INDEX !== null);
   const nav = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -81,9 +84,17 @@ export function SearchPalette() {
 
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 30); }, [open]);
 
+  // Construction paresseuse de l'index au premier affichage
+  useEffect(() => {
+    if (!open || INDEX) return;
+    loading ??= buildIndex().then((idx) => { INDEX = idx; return idx; });
+    let alive = true;
+    loading.then(() => { if (alive) setReady(true); });
+    return () => { alive = false; };
+  }, [open]);
+
   const results = useMemo(() => {
-    if (!open) return [];
-    if (!INDEX) INDEX = buildIndex();
+    if (!open || !ready || !INDEX) return [];
     const nq = norm(q.trim());
     if (!nq) return INDEX.filter((h) => h.kind === "Page" || h.kind === "Outil").slice(0, 12);
     const terms = nq.split(/\s+/);
@@ -100,7 +111,7 @@ export function SearchPalette() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 20)
       .map((x) => x.h);
-  }, [q, open]);
+  }, [q, open, ready]);
 
   useEffect(() => { setSel(0); }, [q]);
 
@@ -122,7 +133,8 @@ export function SearchPalette() {
           aria-label="Recherche globale"
         />
         <div className="max-h-[50vh] overflow-y-auto py-1">
-          {results.length === 0 && <div className="px-5 py-6 text-sm text-muted text-center">Aucun résultat pour « {q} »</div>}
+          {!ready && <div className="px-5 py-6 text-sm text-muted text-center">Indexation du contenu…</div>}
+          {ready && results.length === 0 && <div className="px-5 py-6 text-sm text-muted text-center">Aucun résultat pour « {q} »</div>}
           {results.map((h, i) => (
             <button key={`${h.to}-${i}`} onClick={() => go(h)} onMouseEnter={() => setSel(i)}
               className={`w-full text-left px-5 py-2.5 flex items-center gap-3 ${i === sel ? "bg-accent/12" : ""}`}>

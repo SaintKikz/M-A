@@ -1,9 +1,12 @@
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { useProgress, levelFor } from "./store/progress";
-import Dashboard from "./pages/Dashboard";
 import { Assistant } from "./components/Assistant";
 import { SearchPalette } from "./components/SearchPalette";
+
+// Le Dashboard tire tout le moteur de recommandations (et donc tout le contenu) :
+// il est chargé à la demande comme les autres routes.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 
 // Routes lourdes chargées à la demande (code-splitting)
 const Path = lazy(() => import("./pages/Path"));
