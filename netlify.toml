@@ -1,0 +1,10 @@
+# Déploiement Netlify — M&A Training Lab
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA : toutes les routes sont servies par index.html (React Router)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
