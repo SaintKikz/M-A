@@ -26,6 +26,7 @@ async function buildIndex(): Promise<Hit[]> {
     ["Parcours", "8 parcours par objectif : crash course, desk ready, PE…", "/paths"],
     ["Contrôle qualité", "Checklists deck et modèle, repère les erreurs", "/quality-control"],
     ["M&A public", "Filings US, France/UE et UK Takeover Code", "/public-mna"],
+    ["Project Atlas", "Livrable Excel noté : comps + DCF sur un vrai modèle", "/project-atlas"],
     ["Documents du deal", "Teaser → SPA : qui produit quoi", "/dealdocs"],
     ["Buyer screening", "Trier un univers d'acheteurs", "/screening"],
     ["Ressources", "Formules, cheat sheets, bibliothèque", "/resources"],

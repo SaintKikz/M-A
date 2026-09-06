@@ -4,7 +4,7 @@ import {
   unleverBeta, releverBeta, npv, irr, cagr, terminalValueGordon,
   terminalValueExit, impliedGrowth, dcf, premium, mergerModel,
   moic, irrFromMoic, moicFromIrr, debtSchedule, lboReturns,
-  purchasePriceAllocation, capitalizedSynergyValue,
+  purchasePriceAllocation, capitalizedSynergyValue, percentile, sampleStats,
 } from "./finance";
 
 describe("Bridge EV ↔ Equity", () => {
@@ -221,5 +221,33 @@ describe("Valeur capitalisée des synergies", () => {
     const va = capitalizedSynergyValue({ annualPretaxSynergy: 25, taxRate: 0.25, discountRate: 0.09 });
     expect(va).toBeCloseTo(208.33, 1);
     expect(va).toBeGreaterThan(150);
+  });
+});
+
+describe("Statistiques de comps", () => {
+  it("percentile reproduit PERCENTILE.INC d'Excel", () => {
+    const xs = [1, 2, 3, 4];
+    expect(percentile(xs, 0)).toBe(1);
+    expect(percentile(xs, 0.25)).toBeCloseTo(1.75);
+    expect(percentile(xs, 0.5)).toBeCloseTo(2.5);
+    expect(percentile(xs, 0.75)).toBeCloseTo(3.25);
+    expect(percentile(xs, 1)).toBe(4);
+  });
+  it("médiane d'un échantillon impair = valeur centrale", () => {
+    expect(percentile([5, 1, 3], 0.5)).toBe(3);
+  });
+  it("ignore les valeurs non finies (multiples n.m.)", () => {
+    const s = sampleStats([8, 10, NaN, 12, Infinity]);
+    expect(s.n).toBe(3);
+    expect(s.median).toBe(10);
+  });
+  it("sampleStats renvoie les 5 stats attendues", () => {
+    const s = sampleStats([6, 8, 10, 12, 14]);
+    expect(s.min).toBe(6); expect(s.median).toBe(10); expect(s.max).toBe(14);
+    expect(s.mean).toBe(10);
+  });
+  it("rejette un échantillon vide et un p hors bornes", () => {
+    expect(() => sampleStats([])).toThrow();
+    expect(() => percentile([1, 2], 1.5)).toThrow();
   });
 });

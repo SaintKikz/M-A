@@ -41,6 +41,7 @@ const AnalystDay = lazy(() => import("./pages/AnalystDay"));
 const LearningPaths = lazy(() => import("./pages/LearningPaths"));
 const QualityControl = lazy(() => import("./pages/QualityControl"));
 const PublicMna = lazy(() => import("./pages/PublicMna"));
+const ProjectAtlas = lazy(() => import("./pages/ProjectAtlas"));
 
 const NAV = [
   { to: "/", label: "Dashboard", emoji: "📊" },
@@ -59,6 +60,7 @@ const NAV = [
   { to: "/redbook", label: "Red Book Bank", emoji: "📕" },
   { to: "/mistakes", label: "Mistake Book", emoji: "📓" },
   { to: "/analystday", label: "Analyst Day", emoji: "🌆" },
+  { to: "/project-atlas", label: "Project Atlas", emoji: "📗" },
   { to: "/resources", label: "Ressources", emoji: "📚" },
   { to: "/glossary", label: "Glossaire", emoji: "📖" },
   { to: "/plan", label: "Plan 8 semaines", emoji: "🗓️" },
@@ -146,6 +148,7 @@ export default function App() {
           <Route path="/paths" element={<LearningPaths />} />
           <Route path="/quality-control" element={<QualityControl />} />
           <Route path="/public-mna" element={<PublicMna />} />
+          <Route path="/project-atlas" element={<ProjectAtlas />} />
           <Route path="/academy" element={<Academy />} />
           <Route path="/academy/:chapterId" element={<ChapterPage />} />
           <Route path="/resources" element={<Resources />} />

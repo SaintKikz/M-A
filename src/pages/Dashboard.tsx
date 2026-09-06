@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useProgress, levelFor, readinessScore, topicScore, weaknesses, daysUntil, deskReadyScore } from "../store/progress";
+import { useProgress, levelFor, readinessScore, topicScore, weaknesses, daysUntil, deskReadyScore, bestUnassistedAtlas, atlasStatus } from "../store/progress";
 import { SkillRadar } from "../components/Radar";
 import { nextStep, recommendations, fixLinkForTag, coverage } from "../lib/coach";
 import { Card, Stat, Progress, PageTitle, Tag, Btn } from "../components/ui";
@@ -26,6 +26,9 @@ export default function Dashboard() {
   const ready = readinessScore(s);
   const deskReady = deskReadyScore(s.skillScores);
   const dueMistakes = s.mistakes.filter((m) => !m.retried).length;
+  const atlasBest = bestUnassistedAtlas(s.atlasAttempts);
+  const atlasState = atlasStatus(s.atlasAttempts);
+  const atlasLast = s.atlasAttempts[s.atlasAttempts.length - 1];
   const weak = weaknesses(s.tagErrors);
   const days = daysUntil(DEADLINE);
   const step = nextStep(s);
@@ -62,6 +65,33 @@ export default function Dashboard() {
         <Stat label="XP" value={s.xp} sub={`Niv. ${lvl.index} — ${lvl.name}`} />
         <Stat label="Boss vaincus" value={`${bossesPassed}/${BOSSES.length}`} sub={`${s.badges.length} badges · ${(s.studyMinutes / 60).toFixed(1)}h d'étude`} />
       </div>
+
+      {/* ═══ Livrable Excel ═══ */}
+      <Link to="/project-atlas">
+        <Card className="mb-6 border-accent2/40 hover:border-accent2 !p-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="text-3xl shrink-0">📗</div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] uppercase tracking-wider font-bold text-accent2">Livrable Excel</div>
+              <div className="font-bold">Project Atlas — comps + DCF</div>
+              <div className="text-xs text-muted">
+                {s.atlasAttempts.length === 0
+                  ? "Télécharge le modèle, complète-le dans Excel, fais-le noter."
+                  : `${s.atlasAttempts.length} tentative${s.atlasAttempts.length > 1 ? "s" : ""} · dernier score ${atlasLast?.score ?? "—"}/100`}
+              </div>
+            </div>
+            <div className="flex items-center gap-4 shrink-0">
+              {atlasBest && (
+                <div className="text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-muted font-semibold">Record</div>
+                  <div className="text-xl font-bold text-accent2">{atlasBest.score}</div>
+                </div>
+              )}
+              <Tag color={atlasState === "Associate-ready" ? "green" : atlasState === "Non commencé" ? "muted" : "accent"}>{atlasState}</Tag>
+            </div>
+          </div>
+        </Card>
+      </Link>
 
       {/* ═══ Compétences + actions rapides ═══ */}
       <div className="grid md:grid-cols-[auto_1fr] gap-4 mb-6">
