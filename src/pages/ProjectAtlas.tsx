@@ -3,10 +3,12 @@ import { Card, PageTitle, Btn, Tag, Stat } from "../components/ui";
 import { AtlasBrief } from "../components/atlas/AtlasBrief";
 import { AtlasTimer, useAtlasTimer } from "../components/atlas/AtlasTimer";
 import { AtlasUploader } from "../components/atlas/AtlasUploader";
-import { AtlasReview, AtlasAttemptHistory } from "../components/atlas/AtlasReview";
+import { AtlasReview, AtlasAttemptHistory, AtlasStoredReview } from "../components/atlas/AtlasReview";
 import { atlasCompany } from "../data/projectAtlas";
 import { useProgress, bestUnassistedAtlas, atlasStatus } from "../store/progress";
 import type { AtlasScore } from "../lib/atlasGrader";
+import { cumulativeSeconds, fmtDuration } from "../lib/atlasTiming";
+import { normalizeAtlasAttempt, type AtlasAttempt } from "../store/progress";
 
 const TARGET_MINUTES = 90;
 
@@ -30,6 +32,8 @@ export default function ProjectAtlas() {
   const [error, setError] = useState<string | null>(null);
   const [score, setScore] = useState<AtlasScore | null>(null);
   const [lastDuration, setLastDuration] = useState(0);
+  /** Tentative rouverte depuis l'historique (survit à un rechargement). */
+  const [openedAttempt, setOpenedAttempt] = useState<AtlasAttempt | null>(null);
   const [confirmSolution, setConfirmSolution] = useState(false);
 
   const timer = useAtlasTimer(phase === "working");
@@ -47,7 +51,7 @@ export default function ProjectAtlas() {
 
   const start = () => {
     store.logAtlasEvent("atlas_started");
-    timer.reset();
+    timer.restart();
     setPhase("working");
     window.scrollTo(0, 0);
   };
@@ -69,18 +73,37 @@ export default function ProjectAtlas() {
         return;
       }
 
-      const duration = Math.max(1, Math.round(timer.elapsed));
-      const result = gradeAtlas(parsed, { durationSeconds: duration, targetMinutes: TARGET_MINUTES });
+      const { evaluateAtlasCertification } = await import("../lib/atlasGrader");
+      const d = timer.finish();
+      // La VITESSE se note sur le temps horloge : une longue pause ne l'efface pas.
+      const result = gradeAtlas(parsed, {
+        durationSeconds: Math.max(1, d.wallDurationSeconds), targetMinutes: TARGET_MINUTES,
+      });
+      const cert = evaluateAtlasCertification(result, { assisted: atlasSolutionViewed });
 
       store.logAtlasEvent(atlasAttempts.length === 0 ? "atlas_submitted" : "atlas_resubmitted");
       store.recordAtlasAttempt({
         caseId: "project_atlas_v1",
+        caseVersion: parsed.caseVersion ?? undefined,
+        graderVersion: "1.1",
         score: result.total,
         accuracyScore: result.accuracy, integrityScore: result.integrity,
         completionScore: result.completion, qcScore: result.qc, speedScore: result.speed,
-        durationSeconds: duration,
+        rating: result.rating,
+        certifiable: result.certifiable,
+        certificationEligible: cert.eligible,
+        certificationBlockers: cert.blockers,
+        durationSeconds: Math.max(1, d.wallDurationSeconds),
+        wallDurationSeconds: d.wallDurationSeconds,
+        activeDurationSeconds: d.activeDurationSeconds,
         solutionViewed: atlasSolutionViewed,
-        issues: result.issues.map((i) => i.title),
+        comments: result.comments,
+        // La revue complète est persistée pour pouvoir être rouverte.
+        issues: result.issues.map((i) => ({
+          area: i.area, title: i.title, detail: i.detail,
+          userValue: i.userValue, expectedHint: i.expectedHint,
+          severity: i.severity, tag: i.tag,
+        })),
         filename: file.name,
       });
 
@@ -98,10 +121,12 @@ export default function ProjectAtlas() {
           explanation: i.detail,
         });
       }
-      if (result.total >= 90) store.logAtlasEvent("atlas_completed");
+      // La complétion OFFICIELLE exige une tentative non assistée et certifiable.
+      if (cert.eligible) store.logAtlasEvent("atlas_completed");
 
       setScore(result);
-      setLastDuration(duration);
+      setOpenedAttempt(null);
+      setLastDuration(d.wallDurationSeconds);
       setPhase("review");
       window.scrollTo(0, 0);
     } finally {
@@ -142,27 +167,49 @@ export default function ProjectAtlas() {
         {header}
         {atlasAttempts.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-            <Stat label="Meilleur score" value={best ? `${best.score}` : "—"} sub={best ? "non assisté" : "aucune tentative libre"} />
+            <Stat label="Meilleur score officiel" value={best ? `${best.score}` : "—"} sub={best ? "tentative libre" : "aucune tentative libre"} />
             <Stat label="Dernier score" value={lastAttempt ? `${lastAttempt.score}` : "—"} />
             <Stat label="Tentatives" value={atlasAttempts.length} />
             <Stat label="Statut" value={status} />
           </div>
         )}
 
-        {shown ? (
-          <AtlasReview score={shown} attemptNumber={atlasAttempts.length} durationSeconds={lastDuration}
-            onRetry={() => { setScore(null); setPhase("working"); window.scrollTo(0, 0); }} />
-        ) : (
-          <Card className="mb-5">
-            <div className="font-bold mb-1">Tu as déjà soumis ce livrable</div>
-            <p className="text-sm text-muted mb-3">
-              Reprends ton classeur, corrige les points relevés lors de ta dernière tentative et renvoie-le.
+        {lastAttempt?.assisted && (
+          <Card className="mb-5 border-gold/40 !p-4">
+            <p className="text-sm">
+              <b>Exercice assisté.</b> Le corrigé a été consulté : cette tentative reçoit un score et un
+              retour complet, mais elle ne compte pas pour ton statut officiel ni pour ta compétence
+              Exécution. Ton meilleur score libre reste {best ? `${best.score}/100` : "à établir"}.
             </p>
-            <Btn onClick={() => { setPhase("working"); window.scrollTo(0, 0); }}>Corriger et renvoyer 🔁</Btn>
           </Card>
         )}
 
-        <div className="mt-5"><AtlasAttemptHistory attempts={atlasAttempts} /></div>
+        {openedAttempt ? (
+          <>
+            <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-xs text-muted">Revue archivée d'une tentative précédente</div>
+              <Btn kind="ghost" onClick={() => setOpenedAttempt(null)}>Fermer</Btn>
+            </div>
+            <AtlasStoredReview attempt={openedAttempt} />
+          </>
+        ) : shown ? (
+          <AtlasReview score={shown} attemptNumber={atlasAttempts.length} durationSeconds={lastDuration}
+            onRetry={() => { setScore(null); setOpenedAttempt(null); timer.restart(); setPhase("working"); window.scrollTo(0, 0); }} />
+        ) : lastAttempt ? (
+          // Après un rechargement, la dernière revue est reconstruite depuis le store.
+          <AtlasStoredReview attempt={lastAttempt} />
+        ) : null}
+
+        {!openedAttempt && !shown && lastAttempt && (
+          <div className="mt-4">
+            <Btn onClick={() => { timer.restart(); setPhase("working"); window.scrollTo(0, 0); }}>Corriger et renvoyer 🔁</Btn>
+          </div>
+        )}
+
+        <div className="mt-5">
+          <AtlasAttemptHistory attempts={atlasAttempts} openedId={openedAttempt?.attemptId ?? null}
+            onOpen={(a) => { setOpenedAttempt(a); setScore(null); window.scrollTo(0, 0); }} />
+        </div>
 
         <Card className="mt-5 !p-4">
           <div className="font-bold text-sm mb-1">Corrigé</div>
@@ -204,7 +251,7 @@ export default function ProjectAtlas() {
       <div>
         {header}
         <div className="sticky top-2 z-20 mb-5 bg-surface border border-border rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-          <AtlasTimer elapsed={timer.elapsed} paused={timer.paused}
+          <AtlasTimer elapsed={timer.elapsed} wall={timer.wall} paused={timer.paused}
             onTogglePause={() => timer.setPaused(!timer.paused)} targetMinutes={TARGET_MINUTES} />
           <Btn kind="ghost" onClick={() => download("Project_Atlas_Model_Starter.xlsx")}>Retélécharger le modèle</Btn>
         </div>

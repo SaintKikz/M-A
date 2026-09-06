@@ -17,8 +17,8 @@
 import { dcf, equityFromEv, costOfEquityCapm, wacc as waccFn, sampleStats, type SampleStats } from "../lib/finance.ts";
 
 export const ATLAS_CASE_ID = "project_atlas_v1";
-export const ATLAS_CASE_VERSION = "1.0.0";
-export const ATLAS_GRADER_VERSION = "1.0";
+export const ATLAS_CASE_VERSION = "1.1.0";
+export const ATLAS_GRADER_VERSION = "1.1";
 
 // ─── Calendrier ─────────────────────────────────────────────────────────────
 export const YEARS = ["FY23A", "FY24A", "FY25A", "FY26E", "FY27E", "FY28E", "FY29E", "FY30E"] as const;
@@ -339,3 +339,166 @@ export const ATLAS_FORMULA_REQUIRED: AtlasNamedRange[] = [
   "ATLAS_WACC", "ATLAS_UFCF_26", "ATLAS_UFCF_27", "ATLAS_UFCF_28", "ATLAS_UFCF_29", "ATLAS_UFCF_30",
   "ATLAS_DCF_PV_FCF", "ATLAS_DCF_PV_TV", "ATLAS_DCF_EV", "ATLAS_DCF_EQUITY", "ATLAS_DCF_PRICE",
 ];
+
+// ─── Cibles de correction ───────────────────────────────────────────────────
+// Toutes dérivées de computeAtlasExpected() : il n'existe aucune seconde table
+// de réponses à maintenir. Chaque cible porte son adresse, sa valeur attendue,
+// sa tolérance et si une formule est exigée.
+
+import {
+  PEER_FIELDS, STAT_ROWS, STAT_COLUMNS, SUMMARY_CELLS, SENS, DCF_USER_ROWS, DCF_COLS,
+  peerCell, statCell, sensCell, SHEETS, NAMED,
+  type PeerFieldKey, type StatKey, type SummaryKey,
+} from "./projectAtlasLayout.ts";
+
+export interface GradeTarget {
+  id: string;
+  sheet: string;
+  cell: string;
+  label: string;
+  expected: number;
+  kind: ToleranceKind;
+  /** Une formule est-elle attendue ici ? (faux pour les hypothèses saisies) */
+  formulaExpected: boolean;
+  /** Groupe de pondération dans la note de précision. */
+  group: "peers" | "stats" | "compsImplied" | "dcfCore" | "sensitivity" | "summary";
+  /** Étiquette pour le Mistake Book. */
+  tag: string;
+  /** Nom du comparable concerné, quand il y en a un. */
+  peer?: string;
+}
+
+const KIND_OF_FIELD: Record<string, ToleranceKind> = { currency: "currency", multiple: "multiple" };
+
+/** Le layout nomme la colonne « ev » ; PeerMultiples la nomme « enterpriseValue ». */
+const PEER_FIELD_SOURCE: Record<string, keyof PeerMultiples> = {
+  marketCap: "marketCap", ev: "enterpriseValue",
+  evRevenue26: "evRevenue26", evRevenue27: "evRevenue27",
+  evEbitda26: "evEbitda26", evEbitda27: "evEbitda27",
+  evEbit26: "evEbit26", evEbit27: "evEbit27",
+};
+
+/** Les 64 cellules calculées du tableau de comparables. */
+export function peerTargets(E = computeAtlasExpected()): GradeTarget[] {
+  const out: GradeTarget[] = [];
+  E.peers.forEach((p, i) => {
+    for (const f of PEER_FIELDS) {
+      out.push({
+        id: `peer.${i}.${f.key}`,
+        sheet: SHEETS.comps, cell: peerCell(i, f.key),
+        label: `${p.name} — ${f.label}`,
+        expected: p[PEER_FIELD_SOURCE[f.key]] as number,
+        kind: KIND_OF_FIELD[f.kind],
+        formulaExpected: true, group: "peers",
+        tag: f.key === "ev" || f.key === "marketCap" ? "Enterprise Value" : "Trading Comps",
+        peer: p.name,
+      });
+    }
+  });
+  return out;
+}
+
+/** Les 30 statistiques du tableau de comparables. */
+export function statTargets(E = computeAtlasExpected()): GradeTarget[] {
+  const out: GradeTarget[] = [];
+  for (const col of STAT_COLUMNS) {
+    const stats = E.stats[col.key as keyof typeof E.stats];
+    for (const s of STAT_ROWS) {
+      out.push({
+        id: `stat.${col.key}.${s.key}`,
+        sheet: SHEETS.comps, cell: statCell(s.key as StatKey, col.key as PeerFieldKey),
+        label: `${s.label} ${col.label}`,
+        expected: stats[s.key as StatKey],
+        kind: "multiple", formulaExpected: true, group: "stats", tag: "Trading Comps",
+      });
+    }
+  }
+  return out;
+}
+
+/** Les 25 sorties de la table de sensibilité. */
+export function sensitivityTargets(E = computeAtlasExpected()): GradeTarget[] {
+  const out: GradeTarget[] = [];
+  atlasAssumptions.sensitivityWacc.forEach((w, i) => {
+    atlasAssumptions.sensitivityGrowth.forEach((g, j) => {
+      out.push({
+        id: `sens.${i}.${j}`,
+        sheet: SHEETS.dcf, cell: sensCell(i, j),
+        label: `Sensibilité WACC ${(w * 100).toFixed(1)}% × g ${(g * 100).toFixed(1)}%`,
+        expected: E.dcf.sensitivity[i][j],
+        kind: "sensitivity",
+        // Une table de données Excel ne laisse pas de formule lisible par cellule :
+        // on note la valeur, pas la présence de formule (cf. README, limite assumée).
+        formulaExpected: false, group: "sensitivity", tag: "DCF",
+      });
+    });
+  });
+  return out;
+}
+
+/** Les 8 sorties du Valuation_Summary. */
+export function summaryTargets(E = computeAtlasExpected()): GradeTarget[] {
+  return SUMMARY_CELLS.map((c) => ({
+    id: `summary.${c.key}`,
+    sheet: SHEETS.summary, cell: c.cell, label: c.label,
+    expected: E.summary[c.key as SummaryKey],
+    kind: "perShare" as ToleranceKind,
+    formulaExpected: true, group: "summary" as const, tag: "Valuation Summary",
+  }));
+}
+
+/** Les sorties clés du DCF et de la valorisation par comparables (noms définis). */
+export function coreTargets(E = computeAtlasExpected()): GradeTarget[] {
+  const N = (id: string) => NAMED_ADDR[id];
+  return [
+    // La médiane EV/EBITDA FY27E (H18) est déjà notée par statTargets : on ne
+    // la compte pas deux fois. Le nom défini ATLAS_COMPS_MEDIAN_EV_EBITDA_27
+    // pointe sur cette même cellule et reste donc couvert.
+    { id: "core.impliedEv", label: "EV implicite (comps)", expected: E.comps.impliedEv, kind: "currency", group: "compsImplied", tag: "Trading Comps", ...N("ATLAS_IMPLIED_EV_COMPS") },
+    { id: "core.impliedEquity", label: "Equity value implicite (comps)", expected: E.comps.impliedEquity, kind: "currency", group: "compsImplied", tag: "Net Debt", ...N("ATLAS_IMPLIED_EQUITY_COMPS") },
+    { id: "core.impliedPrice", label: "Prix par action implicite (comps)", expected: E.comps.impliedPrice, kind: "perShare", group: "compsImplied", tag: "Trading Comps", ...N("ATLAS_IMPLIED_PRICE_COMPS") },
+    { id: "core.wacc", label: "WACC", expected: E.dcf.wacc, kind: "percent", group: "dcfCore", tag: "WACC", ...N("ATLAS_WACC") },
+    ...FORECAST_YEARS.map((y, i) => ({
+      id: `core.ufcf${i}`, label: `UFCF ${y}`, expected: E.dcf.ufcf[y],
+      kind: "currency" as ToleranceKind, group: "dcfCore" as const, tag: "DCF",
+      ...N(`ATLAS_UFCF_${26 + i}`),
+    })),
+    { id: "core.pvFcf", label: "Somme des PV des UFCF", expected: E.dcf.pvFcf, kind: "currency", group: "dcfCore", tag: "DCF", ...N("ATLAS_DCF_PV_FCF") },
+    { id: "core.pvTv", label: "PV de la valeur terminale", expected: E.dcf.pvTv, kind: "currency", group: "dcfCore", tag: "Terminal Value", ...N("ATLAS_DCF_PV_TV") },
+    { id: "core.dcfEv", label: "Enterprise value (DCF)", expected: E.dcf.enterpriseValue, kind: "currency", group: "dcfCore", tag: "DCF", ...N("ATLAS_DCF_EV") },
+    { id: "core.dcfEquity", label: "Equity value (DCF)", expected: E.dcf.equityValue, kind: "currency", group: "dcfCore", tag: "Lease Liabilities", ...N("ATLAS_DCF_EQUITY") },
+    { id: "core.dcfPrice", label: "Prix par action (DCF)", expected: E.dcf.pricePerShare, kind: "perShare", group: "dcfCore", tag: "DCF", ...N("ATLAS_DCF_PRICE") },
+  ].map((t) => ({ ...t, formulaExpected: true } as GradeTarget));
+}
+
+/** Toutes les cibles, calculées une fois. */
+export function allGradeTargets(E = computeAtlasExpected()): GradeTarget[] {
+  return [...peerTargets(E), ...statTargets(E), ...coreTargets(E), ...sensitivityTargets(E), ...summaryTargets(E)];
+}
+
+/** Cellules du DCF construites par l'utilisateur, pour l'intégrité des formules. */
+export function dcfFormulaCells(): { sheet: string; cell: string; label: string }[] {
+  const out: { sheet: string; cell: string; label: string }[] = [];
+  for (const r of DCF_USER_ROWS) {
+    for (const c of DCF_COLS) out.push({ sheet: SHEETS.dcf, cell: `${c}${r.row}`, label: `${r.label} (${c})` });
+  }
+  return out;
+}
+
+/** Répartition des 45 points de précision entre les groupes. */
+export const ACCURACY_WEIGHTS: Record<GradeTarget["group"], number> = {
+  peers: 12,        // 64 cellules
+  stats: 5,         // 30 cellules
+  compsImplied: 5,  // 4 sorties
+  dcfCore: 12,      // 12 sorties
+  sensitivity: 6,   // 25 cellules
+  summary: 5,       // 8 sorties
+};
+
+/** Répartition des 20 points d'intégrité des formules. */
+export const INTEGRITY_WEIGHTS = {
+  peers: 6, stats: 3, compsImplied: 3, dcfCore: 4, dcfRows: 2, summary: 2,
+};
+
+// Les adresses des noms définis viennent du layout partagé.
+const NAMED_ADDR = NAMED;

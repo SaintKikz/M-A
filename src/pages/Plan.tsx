@@ -1,18 +1,19 @@
 import { Link } from "react-router-dom";
 import { PLAN, MODULES } from "../data/curriculum";
-import { useProgress, daysUntil } from "../store/progress";
+import { useProgress } from "../store/progress";
 import { Card, PageTitle, Tag, Progress } from "../components/ui";
 
-const DEADLINE = new Date(new Date().getFullYear(), 7, 31).toISOString();
 
 export default function Plan() {
   const { completedLessons, bossResults } = useProgress();
-  const days = daysUntil(DEADLINE);
-  const currentWeek = Math.min(8, Math.max(1, 9 - Math.ceil(days / 7)));
+  // La semaine courante se déduit des leçons réellement validées, jamais d'une date.
+  const allLessonIds = PLAN.flatMap((w) => w.moduleIds.flatMap((id) => MODULES.find((m) => m.id === id)?.lessonIds ?? []));
+  const doneCount = allLessonIds.filter((l) => completedLessons.includes(l)).length;
+  const currentWeek = Math.min(8, Math.max(1, Math.ceil((doneCount / Math.max(1, allLessonIds.length)) * 8) || 1));
 
   return (
     <div>
-      <PageTitle emoji="🗓️" title="Plan intensif — 8 semaines" sub={`J-${days} avant fin août. Tu es (théoriquement) en semaine ${currentWeek}. Routine quotidienne : Daily Drill + leçon/mission + un peu d'Arena. Le week-end : case + boss.`} />
+      <PageTitle emoji="🗓️" title="Plan intensif — 8 semaines" sub={`Tu es en semaine ${currentWeek} au rythme de ta progression. Routine quotidienne : Daily Drill + leçon/mission + un peu d'Arena. Le week-end : case + boss.`} />
       <div className="space-y-4">
         {PLAN.map((w) => {
           const mods = w.moduleIds.map((id) => MODULES.find((m) => m.id === id)).filter(Boolean);

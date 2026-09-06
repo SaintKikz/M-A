@@ -57,12 +57,57 @@ le navigateur avec ExcelJS (chargé à la demande) : il n'est envoyé nulle part
 n'est jamais stocké. Seules les métadonnées de la tentative sont persistées.
 
 Barème sur 100 : précision 45 · intégrité des formules 20 · complétion 15 ·
-contrôle qualité 10 · vitesse 10. Une valeur juste mais **saisie en dur** ne
-reçoit que la moitié des points d'intégrité — un modèle non lié ne tient pas sur
-un desk.
+contrôle qualité 10 · vitesse 10.
 
-Le grader lit les cellules par **noms définis**, pas par coordonnées : deux
-formules différentes qui donnent le bon résultat sont toutes deux acceptées.
+### Ce que le correcteur vérifie réellement (V4.1.1)
+
+**141 cellules notées numériquement**, pas « remplie / vide » :
+
+| Zone | Cellules | Points de précision |
+|---|---|---|
+| Calculs des 8 comparables | 64 | 12 |
+| Statistiques (min/Q1/médiane/Q3/max × 6 colonnes) | 30 | 5 |
+| Valorisation implicite par comparables | 3 | 5 |
+| Sorties clés du DCF | 11 | 12 |
+| Table de sensibilité | 25 | 6 |
+| Synthèse de valorisation | 8 | 5 |
+
+Toutes les valeurs attendues sont **calculées** depuis `projectAtlas.ts` via
+`finance.ts`. Il n'existe aucune seconde table de réponses à maintenir.
+
+**Le contrôle qualité est recalculé par le correcteur.** Les drapeaux `TRUE` et
+le `OK` de l'onglet Checks du classeur soumis ne rapportent aucun point : 16
+règles sont réévaluées indépendamment (bridges, bornes, cohérence des
+statistiques et de la sensibilité, erreurs Excel, formules recalculées). Écrire
+« OK » à la main est même détecté et signalé.
+
+**Une casse structurelle plafonne le score**, et les plafonds se cumulent : un
+onglet analytique manquant plafonne à 59, plusieurs à 40. Un classeur sans DCF
+ou sans synthèse ne peut jamais être « Associate-ready ».
+
+**Score ≠ certification.** `gradeAtlas()` note la qualité du classeur ;
+`evaluateAtlasCertification()` décide du statut officiel. « Associate-ready »
+exige les 141 cellules justes, zéro problème bloquant, tous les contrôles au
+vert **et** une tentative non assistée. Consulter le corrigé n'efface pas les
+scores suivants — il les marque « exercice assisté » : ils ne comptent ni pour
+le meilleur score officiel, ni pour la compétence Exécution, ni pour le statut.
+
+**Chronométrage.** Le compteur affiché se met en pause, mais le temps horloge
+continue : c'est lui qui note la vitesse. Mettre en pause trois heures ne donne
+donc pas 10/10. Chaque « corriger et renvoyer » ouvre une nouvelle tentative
+repartant de zéro ; le temps cumulé se dérive de l'historique.
+
+**Revue persistée.** Commentaires, issues détaillées et barème sont conservés :
+la revue se rouvre après un rechargement, et chaque tentative de l'historique
+est cliquable. Le classeur lui-même n'est jamais stocké.
+
+Le grader lit les cellules par **noms définis** et par plan de classeur, pas par
+coordonnées codées en dur : deux formules différentes qui donnent le bon
+résultat sont toutes deux acceptées.
+
+*Limite assumée :* la table de sensibilité est notée sur ses **valeurs**, pas sur
+la présence d'une formule — une table de données Excel ne laisse pas de formule
+lisible par cellule via ExcelJS.
 
 ---
 
@@ -104,7 +149,8 @@ src/
 │   ├── dealdocs.ts      Les 20 documents d'un process M&A
 │   ├── paths.ts         8 parcours d'apprentissage par objectif
 │   ├── publicmna.ts     M&A public par juridiction (US / France-UE / UK)
-│   ├── projectAtlas.ts  ⭐ Données canoniques du livrable Excel + valeurs attendues
+│   ├── projectAtlas.ts  ⭐ Données canoniques + les 141 cibles de correction
+│   ├── projectAtlasLayout.ts  Plan du classeur (partagé navigateur / scripts)
 │   ├── screening.ts     Simulateur de buyer screening
 │   ├── analystday.ts    Scénarios de journée d'analyste
 │   ├── resources.ts     Catalogue de ressources externes
@@ -113,7 +159,8 @@ src/
 │   ├── finance.ts       ⭐ Toutes les formules financières (testées)
 │   ├── finance.test.ts  30 tests sur les valeurs de référence
 │   ├── atlasWorkbook.ts Lecture d'un classeur Atlas (ExcelJS, lazy)
-│   ├── atlasGrader.ts   Notation du livrable + commentaires d'Associate
+│   ├── atlasGrader.ts   Notation, QC indépendant, plafonds, certification
+│   ├── atlasTiming.ts   Chronométrage par tentative et politique de pause
 │   ├── grader.ts        Correction heuristique des réponses libres
 │   ├── aiClient.ts      Coach IA (SDK chargé dynamiquement)
 │   ├── coach.ts         Moteur de recommandations « quoi faire maintenant »
@@ -144,7 +191,7 @@ documentées et erreurs explicites sur entrée invalide. Couvert et testé :
 - LBO : échéancier de dette avec cash sweep, MOIC, IRR
 
 ```bash
-npm test   # 83 tests
+npm test   # 113 tests
 ```
 
 Ces fonctions alimentent directement la page **Outils** — les calculateurs et les tests

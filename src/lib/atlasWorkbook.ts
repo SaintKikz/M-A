@@ -4,9 +4,10 @@
 // le bundle initial.
 
 import {
-  ATLAS_CASE_ID, ATLAS_SHEETS, ATLAS_NAMED_RANGES,
-  type AtlasNamedRange,
+  ATLAS_CASE_ID, ATLAS_CASE_VERSION, ATLAS_SHEETS, ATLAS_NAMED_RANGES,
+  allGradeTargets, dcfFormulaCells,
 } from "../data/projectAtlas.ts";
+import { CHECK_ROWS, SHEETS } from "../data/projectAtlasLayout.ts";
 
 /** Valeur lue pour un nom défini. */
 export interface CellRead {
@@ -40,6 +41,14 @@ export interface ParsedAtlas {
   sensitivityFilled: number;
   /** Aucune formule n'a de résultat en cache → le classeur n'a pas été recalculé. */
   noCachedResults: boolean;
+  /** Lecture de CHAQUE cible de correction, indexée par son id. */
+  targets: Record<string, CellRead>;
+  /** Cellules du DCF que l'utilisateur construit, pour l'intégrité des formules. */
+  dcfCells: { cell: string; read: CellRead }[];
+  /** Les 10 contrôles de l'onglet Checks portent-ils une formule ? */
+  checkFormulas: boolean[];
+  /** Le MODEL CHECK est-il une formule (et non un « OK » tapé à la main) ? */
+  modelCheckHasFormula: boolean;
 }
 
 export class AtlasParseError extends Error {
@@ -161,6 +170,13 @@ export async function parseAtlasWorkbook(file: File | ArrayBuffer | Uint8Array):
       "Ce classeur ne semble pas être le modèle Project Atlas.",
       "Repars du fichier Project_Atlas_Model_Starter.xlsx téléchargé sur cette page.");
   }
+  // Une version inconnue n'est jamais corrigée en silence : le plan des cellules
+  // aurait changé et la note n'aurait aucun sens.
+  if (caseVersion !== ATLAS_CASE_VERSION) {
+    throw new AtlasParseError(
+      `Cette version du modèle Project Atlas (${caseVersion ?? "inconnue"}) n'est plus compatible avec le correcteur (version attendue : ${ATLAS_CASE_VERSION}).`,
+      "Retélécharge le modèle de départ depuis cette page et reprends ton travail dessus.");
+  }
 
   const missingSheets = ATLAS_SHEETS.filter((s) => !sheets.includes(s));
 
@@ -231,9 +247,42 @@ export async function parseAtlasWorkbook(file: File | ArrayBuffer | Uint8Array):
     }
   }
 
+  // ─── Lecture de toutes les cibles de correction ───────────────────────────
+  const targets: Record<string, CellRead> = {};
+  for (const t of allGradeTargets()) {
+    const ws = wb.getWorksheet(t.sheet);
+    targets[t.id] = ws
+      ? readCell(ws.getCell(t.cell))
+      : { value: null, text: null, hasFormula: false, error: null, blank: true };
+    if (targets[t.id].hasFormula) {
+      formulaCount++;
+      if (targets[t.id].value !== null || targets[t.id].text !== null || targets[t.id].error) cachedCount++;
+    }
+  }
+
+  // ─── Cellules du DCF construites par l'utilisateur ────────────────────────
+  const dcfWsForCells = wb.getWorksheet(SHEETS.dcf);
+  const dcfCells = dcfFormulaCells().map((c) => ({
+    cell: c.cell,
+    read: dcfWsForCells
+      ? readCell(dcfWsForCells.getCell(c.cell))
+      : { value: null, text: null, hasFormula: false, error: null, blank: true },
+  }));
+
+  // ─── Les contrôles sont-ils réellement calculés ? ─────────────────────────
+  const checkFormulas: boolean[] = [];
+  let modelCheckHasFormula = false;
+  if (checksWs) {
+    for (let r = CHECK_ROWS.first; r <= CHECK_ROWS.last; r++) {
+      checkFormulas.push(readCell(checksWs.getCell(`D${r}`)).hasFormula);
+    }
+    modelCheckHasFormula = readCell(checksWs.getCell(`D${CHECK_ROWS.modelCheck}`)).hasFormula;
+  }
+
   return {
     caseId, caseVersion, variant, sheets, missingSheets, cells, missingNames,
     errorCells, checkResults, compsFilled, sensitivityFilled,
+    targets, dcfCells, checkFormulas, modelCheckHasFormula,
     noCachedResults: formulaCount > 3 && cachedCount === 0,
   };
 }
