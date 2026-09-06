@@ -228,6 +228,49 @@ export function mergerModel(m: MergerInputs): MergerResult {
   };
 }
 
+// ─── Purchase Price Allocation ──────────────────────────────────────────────
+export interface PpaResult { totalWriteUp: number; deferredTaxLiability: number; goodwill: number }
+
+/**
+ * PPA : on réévalue les actifs identifiables à leur juste valeur (write-up),
+ * ce qui crée un impôt différé passif (le step-up n'est pas déductible dans un
+ * stock deal), et le reliquat du prix payé devient du goodwill.
+ *   DTL      = write-up total × taux d'impôt
+ *   Goodwill = prix payé − capitaux propres comptables − write-up + DTL
+ * Le +DTL vient de ce que le passif d'impôt différé réduit l'actif net acquis.
+ */
+export function purchasePriceAllocation(p: {
+  equityPurchasePrice: number;
+  targetBookEquity: number;
+  ppeWriteUp?: number;
+  intangibleWriteUp?: number;
+  otherWriteUp?: number;
+  taxRate: number;
+}): PpaResult {
+  if (p.taxRate < 0 || p.taxRate >= 1) throw new Error("Taux d'impôt attendu en décimal [0, 1)");
+  const totalWriteUp = (p.ppeWriteUp ?? 0) + (p.intangibleWriteUp ?? 0) + (p.otherWriteUp ?? 0);
+  const deferredTaxLiability = totalWriteUp * p.taxRate;
+  const goodwill = p.equityPurchasePrice - p.targetBookEquity - totalWriteUp + deferredTaxLiability;
+  return { totalWriteUp, deferredTaxLiability, goodwill };
+}
+
+/**
+ * Valeur capitalisée d'un flux de synergies annuelles (perpétuité) :
+ *   VA = synergies après impôt / (WACC − g)
+ * À comparer à la prime payée : si la prime dépasse cette valeur, l'acquéreur
+ * transfère de la valeur aux actionnaires de la cible.
+ */
+export function capitalizedSynergyValue(p: {
+  annualPretaxSynergy: number;
+  taxRate: number;
+  discountRate: number;
+  growthRate?: number;
+}): number {
+  const g = p.growthRate ?? 0;
+  if (p.discountRate <= g) throw new Error("Le taux d'actualisation doit être > à la croissance");
+  return (p.annualPretaxSynergy * (1 - p.taxRate)) / (p.discountRate - g);
+}
+
 // ─── LBO ────────────────────────────────────────────────────────────────────
 export function moic(equityOut: number, equityIn: number): number {
   if (equityIn <= 0) throw new Error("Equity investie > 0 requise");

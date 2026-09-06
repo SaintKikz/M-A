@@ -38,9 +38,13 @@ const Diagnostic = lazy(() => import("./pages/Diagnostic"));
 const DealDocs = lazy(() => import("./pages/DealDocs"));
 const BuyerScreening = lazy(() => import("./pages/BuyerScreening"));
 const AnalystDay = lazy(() => import("./pages/AnalystDay"));
+const LearningPaths = lazy(() => import("./pages/LearningPaths"));
+const QualityControl = lazy(() => import("./pages/QualityControl"));
+const PublicMna = lazy(() => import("./pages/PublicMna"));
 
 const NAV = [
   { to: "/", label: "Dashboard", emoji: "📊" },
+  { to: "/paths", label: "Parcours", emoji: "🧭" },
   { to: "/academy", label: "Académie", emoji: "🎓" },
   { to: "/path", label: "Interview Track", emoji: "🗺️" },
   { to: "/drill", label: "Daily Drill", emoji: "⚡" },
@@ -48,6 +52,8 @@ const NAV = [
   { to: "/excel", label: "Excel Lab", emoji: "🟩" },
   { to: "/desk", label: "Analyst Desk", emoji: "💼" },
   { to: "/dealroom", label: "Deal Room", emoji: "🏢" },
+  { to: "/quality-control", label: "Contrôle qualité", emoji: "✅" },
+  { to: "/public-mna", label: "M&A public", emoji: "🏛️" },
   { to: "/arena", label: "Interview Arena", emoji: "🎤" },
   { to: "/flashcards", label: "Flashcards", emoji: "🃏" },
   { to: "/redbook", label: "Red Book Bank", emoji: "📕" },
@@ -137,6 +143,9 @@ export default function App() {
           <Route path="/dealdocs" element={<DealDocs />} />
           <Route path="/screening" element={<BuyerScreening />} />
           <Route path="/analystday" element={<AnalystDay />} />
+          <Route path="/paths" element={<LearningPaths />} />
+          <Route path="/quality-control" element={<QualityControl />} />
+          <Route path="/public-mna" element={<PublicMna />} />
           <Route path="/academy" element={<Academy />} />
           <Route path="/academy/:chapterId" element={<ChapterPage />} />
           <Route path="/resources" element={<Resources />} />

@@ -23,6 +23,9 @@ async function buildIndex(): Promise<Hit[]> {
     ["Mistake Book", "Journal d'erreurs et retry", "/mistakes"],
     ["Analyst Day", "Simulation d'une journée d'analyste", "/analystday"],
     ["Diagnostic", "Évaluation d'entrée : Desk Ready Score", "/diagnostic"],
+    ["Parcours", "8 parcours par objectif : crash course, desk ready, PE…", "/paths"],
+    ["Contrôle qualité", "Checklists deck et modèle, repère les erreurs", "/quality-control"],
+    ["M&A public", "Filings US, France/UE et UK Takeover Code", "/public-mna"],
     ["Documents du deal", "Teaser → SPA : qui produit quoi", "/dealdocs"],
     ["Buyer screening", "Trier un univers d'acheteurs", "/screening"],
     ["Ressources", "Formules, cheat sheets, bibliothèque", "/resources"],
@@ -55,6 +58,11 @@ async function buildIndex(): Promise<Hit[]> {
   for (const d of REAL_DEALS) hits.push({ kind: "Deal", title: d.title, sub: d.sector, to: `/dealroom/${d.id}`, keywords: d.buyer + " " + d.target });
   for (const q of BANK) hits.push({ kind: "Question", title: q.question.slice(0, 90), sub: `${q.category} · ${q.sub}`, to: `/redbook?q=${encodeURIComponent(q.question.slice(0, 40))}`, keywords: q.tags.join(" ") });
   for (const s of EXCEL_SHORTCUTS) hits.push({ kind: "Raccourci", title: s.action, sub: `${s.mac} · ${s.win}`, to: "/excel", keywords: s.category });
+  const [{ LEARNING_PATHS }, { JURISDICTIONS }] = await Promise.all([import("../data/paths"), import("../data/publicmna")]);
+  for (const p of LEARNING_PATHS) hits.push({ kind: "Parcours", title: p.title, sub: `${p.audience} · ${p.hours}`, to: "/paths", keywords: p.goal });
+  for (const j of JURISDICTIONS)
+    for (const d of j.documents)
+      hits.push({ kind: "Filing", title: d.name, sub: `${j.label} — ${d.purpose.slice(0, 70)}`, to: "/public-mna", keywords: j.label });
   return hits;
 }
 

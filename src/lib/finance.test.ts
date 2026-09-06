@@ -4,6 +4,7 @@ import {
   unleverBeta, releverBeta, npv, irr, cagr, terminalValueGordon,
   terminalValueExit, impliedGrowth, dcf, premium, mergerModel,
   moic, irrFromMoic, moicFromIrr, debtSchedule, lboReturns,
+  purchasePriceAllocation, capitalizedSynergyValue,
 } from "./finance";
 
 describe("Bridge EV ↔ Equity", () => {
@@ -170,5 +171,55 @@ describe("LBO", () => {
     const noLev = lboReturns({ ...base, leverage: 0 });
     const lev = lboReturns({ ...base, leverage: 5 });
     expect(lev.moic).toBeGreaterThan(noLev.moic);
+  });
+});
+
+describe("Purchase Price Allocation", () => {
+  it("goodwill = prix − book equity − write-up + DTL", () => {
+    // Prix 1000, book equity 400, write-up 200, impôt 25% → DTL 50, goodwill 450
+    const r = purchasePriceAllocation({
+      equityPurchasePrice: 1000, targetBookEquity: 400,
+      ppeWriteUp: 120, intangibleWriteUp: 80, taxRate: 0.25,
+    });
+    expect(r.totalWriteUp).toBe(200);
+    expect(r.deferredTaxLiability).toBe(50);
+    expect(r.goodwill).toBe(450);
+  });
+  it("sans write-up, le goodwill est le simple écart au book equity", () => {
+    const r = purchasePriceAllocation({ equityPurchasePrice: 900, targetBookEquity: 500, taxRate: 0.25 });
+    expect(r.totalWriteUp).toBe(0);
+    expect(r.deferredTaxLiability).toBe(0);
+    expect(r.goodwill).toBe(400);
+  });
+  it("un write-up plus élevé réduit le goodwill (net de la DTL)", () => {
+    const base = { equityPurchasePrice: 1000, targetBookEquity: 400, taxRate: 0.25 };
+    const low = purchasePriceAllocation({ ...base, ppeWriteUp: 100 });
+    const high = purchasePriceAllocation({ ...base, ppeWriteUp: 300 });
+    expect(high.goodwill).toBeLessThan(low.goodwill);
+    // chaque euro de write-up réduit le goodwill de (1 − t)
+    expect(low.goodwill - high.goodwill).toBeCloseTo(200 * 0.75);
+  });
+  it("rejette un taux d'impôt hors [0, 1)", () => {
+    expect(() => purchasePriceAllocation({ equityPurchasePrice: 1, targetBookEquity: 1, taxRate: 25 })).toThrow();
+  });
+});
+
+describe("Valeur capitalisée des synergies", () => {
+  it("perpétuité sans croissance : 20 avant impôt, t 25%, WACC 8% → 187,5", () => {
+    expect(capitalizedSynergyValue({ annualPretaxSynergy: 20, taxRate: 0.25, discountRate: 0.08 })).toBeCloseTo(187.5);
+  });
+  it("la croissance augmente la valeur", () => {
+    const flat = capitalizedSynergyValue({ annualPretaxSynergy: 20, taxRate: 0.25, discountRate: 0.08 });
+    const grow = capitalizedSynergyValue({ annualPretaxSynergy: 20, taxRate: 0.25, discountRate: 0.08, growthRate: 0.02 });
+    expect(grow).toBeGreaterThan(flat);
+  });
+  it("rejette g ≥ taux d'actualisation (au lieu de renvoyer NaN)", () => {
+    expect(() => capitalizedSynergyValue({ annualPretaxSynergy: 20, taxRate: 0.25, discountRate: 0.02, growthRate: 0.02 })).toThrow();
+  });
+  it("test du banquier : prime payée vs valeur des synergies", () => {
+    // Prime de 150 pour 25 de synergies avant impôt, t 25%, WACC 9% → VA 208 > 150 : le deal crée de la valeur
+    const va = capitalizedSynergyValue({ annualPretaxSynergy: 25, taxRate: 0.25, discountRate: 0.09 });
+    expect(va).toBeCloseTo(208.33, 1);
+    expect(va).toBeGreaterThan(150);
   });
 });

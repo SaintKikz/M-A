@@ -77,9 +77,10 @@ export default function Dashboard() {
             { to: "/drill", emoji: "⚡", label: "Daily Drill", sub: "10 min" },
             { to: "/analystday", emoji: "🌆", label: "Analyst Day", sub: "Simulation" },
             { to: "/tools", emoji: "🧮", label: "Calculateurs", sub: "DCF, LBO, merger" },
+            { to: "/quality-control", emoji: "✅", label: "Contrôle qualité", sub: "Deck & modèle" },
             { to: "/excel", emoji: "🟩", label: "Excel Lab", sub: `Record ${s.arcade.best} pts` },
             { to: "/mistakes", emoji: "📓", label: "Mistake Book", sub: dueMistakes > 0 ? `${dueMistakes} à revoir` : "À jour" },
-            { to: "/screening", emoji: "🎯", label: "Buyer screening", sub: "Tri d'acheteurs" },
+            { to: "/paths", emoji: "🧭", label: "Parcours", sub: "8 objectifs" },
           ].map((a) => (
             <Link key={a.to} to={a.to}>
               <Card className="!p-3.5 h-full hover:border-accent/60">
