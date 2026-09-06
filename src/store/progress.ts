@@ -15,8 +15,31 @@ export interface MistakeEntry {
   retried: boolean;
 }
 
+// ─── Livrables Excel (Project Atlas) ────────────────────────────────────────
+// On ne stocke QUE des métadonnées : jamais le contenu du classeur.
+export interface AtlasAttempt {
+  caseId: string;
+  attemptId: string;
+  timestamp: string;        // ISO
+  score: number;
+  accuracyScore: number;
+  integrityScore: number;
+  completionScore: number;
+  qcScore: number;
+  speedScore: number;
+  durationSeconds: number;
+  solutionViewed: boolean;
+  assisted: boolean;        // tentative postérieure à la révélation de la solution
+  issues: string[];         // titres des problèmes, pour l'historique
+  filename: string;
+}
+
+export type AtlasEvent =
+  | "atlas_started" | "atlas_file_downloaded" | "atlas_submitted"
+  | "atlas_resubmitted" | "atlas_solution_viewed" | "atlas_completed";
+
 // ─── Compétences (Desk Ready Score par skill) ───────────────────────────────
-export const SKILLS = ["Accounting", "Valuation", "DCF", "M&A", "LBO", "EV/Equity", "Process", "Excel"] as const;
+export const SKILLS = ["Accounting", "Valuation", "DCF", "M&A", "LBO", "EV/Equity", "Process", "Excel", "Exécution"] as const;
 export type Skill = (typeof SKILLS)[number];
 
 export const topicToSkill = (topic: string): Skill => {
@@ -112,6 +135,9 @@ interface ProgressState {
   arcade: { best: number; plays: number; history: { date: string; score: number; accuracy: number; avgMs: number }[] }; // Shortcut Arena
   skillScores: Record<string, { score: number; n: number }>; // Desk Ready par compétence (moyenne mobile)
   diagnosticDone: boolean;
+  atlasAttempts: AtlasAttempt[];       // livrables Excel soumis (métadonnées seules)
+  atlasSolutionViewed: boolean;
+  atlasEvents: { event: AtlasEvent; at: string }[];
 
   completeChapter: (id: string, score: number, xp: number) => void;
   addStudyMinutes: (n: number) => void;
@@ -133,6 +159,9 @@ interface ProgressState {
   recordArcade: (score: number, accuracy: number, avgMs: number) => void;
   recordSkill: (skill: Skill, correct: boolean) => void;
   seedSkills: (scores: Record<string, number>) => void;
+  recordAtlasAttempt: (a: Omit<AtlasAttempt, "attemptId" | "timestamp" | "assisted">) => void;
+  markAtlasSolutionViewed: () => void;
+  logAtlasEvent: (event: AtlasEvent) => void;
   reset: () => void;
 }
 
@@ -159,6 +188,9 @@ const initial = {
   arcade: { best: 0, plays: 0, history: [] as { date: string; score: number; accuracy: number; avgMs: number }[] },
   skillScores: {} as Record<string, { score: number; n: number }>,
   diagnosticDone: false,
+  atlasAttempts: [] as AtlasAttempt[],
+  atlasSolutionViewed: false,
+  atlasEvents: [] as { event: AtlasEvent; at: string }[],
 };
 
 export const useProgress = create<ProgressState>()(
@@ -287,6 +319,37 @@ export const useProgress = create<ProgressState>()(
           return { skillScores: { ...s.skillScores, [skill]: { score: cur.score + alpha * (target - cur.score), n: cur.n + 1 } } };
         }),
 
+      recordAtlasAttempt: (a) =>
+        set((s) => {
+          const attempt: AtlasAttempt = {
+            ...a,
+            attemptId: `${a.caseId}-${s.atlasAttempts.length + 1}`,
+            timestamp: new Date().toISOString(),
+            // Une tentative est « assistée » dès que la solution a été consultée.
+            assisted: s.atlasSolutionViewed,
+          };
+          // L'exécution réelle pèse sur le Desk Ready, à la hauteur du score obtenu.
+          const cur = s.skillScores["Exécution"] ?? { score: 50, n: 0 };
+          const alpha = 0.5; // un livrable vaut bien plus qu'une question de quiz
+          return {
+            atlasAttempts: [...s.atlasAttempts, attempt].slice(-30),
+            xp: s.xp + Math.round(a.score * 1.5),
+            skillScores: {
+              ...s.skillScores,
+              "Exécution": { score: cur.score + alpha * (a.score - cur.score), n: cur.n + 1 },
+            },
+          };
+        }),
+
+      markAtlasSolutionViewed: () =>
+        set((s) => ({
+          atlasSolutionViewed: true,
+          atlasEvents: [...s.atlasEvents, { event: "atlas_solution_viewed" as AtlasEvent, at: new Date().toISOString() }].slice(-100),
+        })),
+
+      logAtlasEvent: (event) =>
+        set((s) => ({ atlasEvents: [...s.atlasEvents, { event, at: new Date().toISOString() }].slice(-100) })),
+
       seedSkills: (scores) =>
         set((s) => ({
           diagnosticDone: true,
@@ -325,6 +388,22 @@ export function weaknesses(tagErrors: Record<string, number>, topN = 5): { tag: 
     .sort((a, b) => b[1] - a[1])
     .slice(0, topN)
     .map(([tag, errors]) => ({ tag, errors: Math.round(errors) }));
+}
+
+/** Meilleur score Atlas NON assisté (le seul qui compte comme record). */
+export function bestUnassistedAtlas(attempts: AtlasAttempt[]): AtlasAttempt | null {
+  const clean = attempts.filter((a) => !a.assisted);
+  if (clean.length === 0) return null;
+  return clean.reduce((best, a) => (a.score > best.score ? a : best));
+}
+
+/** Statut Atlas pour le Dashboard. */
+export function atlasStatus(attempts: AtlasAttempt[]): "Non commencé" | "En cours" | "Terminé" | "Associate-ready" {
+  if (attempts.length === 0) return "Non commencé";
+  const best = Math.max(...attempts.map((a) => a.score));
+  if (best >= 90) return "Associate-ready";
+  if (best >= 70) return "Terminé";
+  return "En cours";
 }
 
 /** Desk Ready Score /100 : moyenne des compétences évaluées, pondérée par la couverture. */

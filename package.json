@@ -9,10 +9,13 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "generate:atlas": "node --experimental-strip-types scripts/generate-project-atlas.mjs",
+    "validate:atlas": "node --experimental-strip-types scripts/validate-project-atlas.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
+    "exceljs": "^4.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",

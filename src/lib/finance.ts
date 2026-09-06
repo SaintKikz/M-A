@@ -123,6 +123,34 @@ export function cagr(begin: number, end: number, years: number): number {
   return Math.pow(end / begin, 1 / years) - 1;
 }
 
+// ─── Statistiques d'échantillon (comps) ─────────────────────────────────────
+/**
+ * Percentile par interpolation linéaire — la méthode de PERCENTILE.INC d'Excel,
+ * pour que les stats d'un tableau de comps soient reproductibles à l'identique.
+ * p ∈ [0, 1]. Ignore les valeurs non finies (multiples « n.m. »).
+ */
+export function percentile(values: number[], p: number): number {
+  const xs = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (xs.length === 0) throw new Error("Aucune valeur exploitable");
+  if (p < 0 || p > 1) throw new Error("Percentile attendu entre 0 et 1");
+  const idx = (xs.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return lo === hi ? xs[lo] : xs[lo] + (xs[hi] - xs[lo]) * (idx - lo);
+}
+
+export interface SampleStats { min: number; q1: number; median: number; q3: number; max: number; mean: number; n: number }
+
+/** Les 5 statistiques d'un tableau de comps, plus la moyenne. */
+export function sampleStats(values: number[]): SampleStats {
+  const xs = values.filter((v) => Number.isFinite(v));
+  if (xs.length === 0) throw new Error("Aucune valeur exploitable");
+  return {
+    min: percentile(xs, 0), q1: percentile(xs, 0.25), median: percentile(xs, 0.5),
+    q3: percentile(xs, 0.75), max: percentile(xs, 1),
+    mean: xs.reduce((a, b) => a + b, 0) / xs.length, n: xs.length,
+  };
+}
+
 // ─── DCF ────────────────────────────────────────────────────────────────────
 /** TV Gordon = FCF_final × (1 + g) / (WACC − g). Exige WACC > g. */
 export function terminalValueGordon(finalFcf: number, discountRate: number, g: number): number {

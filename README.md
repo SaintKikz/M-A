@@ -30,8 +30,39 @@ npm run dev      # → http://localhost:5173
 | `npm run build` | Typecheck + build de production dans `dist/` |
 | `npm run preview` | Sert le build de production localement |
 | `npm test` | Suite de tests (vitest) |
+| `npm run generate:atlas` | Régénère les classeurs Project Atlas |
+| `npm run validate:atlas` | Vérifie les classeurs et leur notation |
 | `npm run test:watch` | Tests en mode watch |
 | `npm run typecheck` | `tsc -b` seul |
+
+---
+
+## 📗 Project Atlas — le livrable Excel
+
+La boucle centrale n'est pas un quiz : **recevoir une tâche → télécharger un vrai
+classeur → travailler dans Excel → déposer → recevoir une revue d'Associate →
+corriger → renvoyer**.
+
+- `public/project-atlas/Project_Atlas_Model_Starter.xlsx` — le modèle à compléter
+- `public/project-atlas/Project_Atlas_Model_Solution.xlsx` — le corrigé
+- `public/project-atlas/Project_Atlas_Brief.html` — le brief (imprimable en PDF)
+
+**Les classeurs sont générés, jamais maintenus à la main.** `npm run generate:atlas`
+les reconstruit depuis `src/data/projectAtlas.ts`, qui calcule toutes les valeurs
+attendues via `src/lib/finance.ts`. Modifier une hypothèse et régénérer suffit à
+resynchroniser le modèle, le corrigé, le grader et les tests.
+
+**La correction est locale et déterministe.** Le classeur déposé est analysé dans
+le navigateur avec ExcelJS (chargé à la demande) : il n'est envoyé nulle part et
+n'est jamais stocké. Seules les métadonnées de la tentative sont persistées.
+
+Barème sur 100 : précision 45 · intégrité des formules 20 · complétion 15 ·
+contrôle qualité 10 · vitesse 10. Une valeur juste mais **saisie en dur** ne
+reçoit que la moitié des points d'intégrité — un modèle non lié ne tient pas sur
+un desk.
+
+Le grader lit les cellules par **noms définis**, pas par coordonnées : deux
+formules différentes qui donnent le bon résultat sont toutes deux acceptées.
 
 ---
 
@@ -73,6 +104,7 @@ src/
 │   ├── dealdocs.ts      Les 20 documents d'un process M&A
 │   ├── paths.ts         8 parcours d'apprentissage par objectif
 │   ├── publicmna.ts     M&A public par juridiction (US / France-UE / UK)
+│   ├── projectAtlas.ts  ⭐ Données canoniques du livrable Excel + valeurs attendues
 │   ├── screening.ts     Simulateur de buyer screening
 │   ├── analystday.ts    Scénarios de journée d'analyste
 │   ├── resources.ts     Catalogue de ressources externes
@@ -80,6 +112,8 @@ src/
 ├── lib/
 │   ├── finance.ts       ⭐ Toutes les formules financières (testées)
 │   ├── finance.test.ts  30 tests sur les valeurs de référence
+│   ├── atlasWorkbook.ts Lecture d'un classeur Atlas (ExcelJS, lazy)
+│   ├── atlasGrader.ts   Notation du livrable + commentaires d'Associate
 │   ├── grader.ts        Correction heuristique des réponses libres
 │   ├── aiClient.ts      Coach IA (SDK chargé dynamiquement)
 │   ├── coach.ts         Moteur de recommandations « quoi faire maintenant »
@@ -110,7 +144,7 @@ documentées et erreurs explicites sur entrée invalide. Couvert et testé :
 - LBO : échéancier de dette avec cash sweep, MOIC, IRR
 
 ```bash
-npm test   # 38 tests
+npm test   # 83 tests
 ```
 
 Ces fonctions alimentent directement la page **Outils** — les calculateurs et les tests

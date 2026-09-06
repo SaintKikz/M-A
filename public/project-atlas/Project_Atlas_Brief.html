@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<title>Project Atlas — Brief de mission</title>
+<style>
+  @page { size: A4; margin: 18mm; }
+  body { font: 11pt/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; max-width: 760px; margin: 40px auto; padding: 0 24px; }
+  h1 { font-size: 22pt; color: #1F3864; margin: 0 0 4px; }
+  h2 { font-size: 12pt; color: #1F3864; margin: 26px 0 8px; border-bottom: 1px solid #d0d7e5; padding-bottom: 4px; }
+  .sub { color: #666; font-size: 10pt; margin-bottom: 24px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 10pt; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e5e9f0; }
+  th { background: #1F3864; color: #fff; font-weight: 600; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .box { background: #f5f7fb; border-left: 3px solid #1F3864; padding: 12px 16px; margin: 14px 0; }
+  .warn { background: #fff8e6; border-left-color: #c08a00; }
+  ol li, ul li { margin: 4px 0; }
+  footer { margin-top: 34px; padding-top: 12px; border-top: 1px solid #d0d7e5; color: #888; font-size: 9pt; }
+  @media print { body { margin: 0; } .noprint { display: none; } }
+</style></head><body>
+<div class="noprint" style="background:#eef2f9;padding:10px 14px;border-radius:8px;margin-bottom:20px;font-size:10pt">
+  💡 Pour obtenir un PDF : <b>Fichier → Imprimer → Enregistrer au format PDF</b>.
+</div>
+
+<h1>PROJECT ATLAS</h1>
+<div class="sub">Analyse de valorisation préliminaire · Confidentiel · Exercice pédagogique</div>
+
+<h2>Contexte</h2>
+<p>Groupe européen de produits de grande consommation de marque : soin de la personne, entretien de la maison et petits appareils. Trois marques principales, distribution en grande surface et en pharmacie, présence en France, Benelux, Allemagne et Italie. Croissance tirée par le premium et l'export.</p>
+<p><b>Atlas Consumer Group</b> est envisagé pour un processus de cession. L'équipe prépare une première
+fourchette de valorisation avant la réunion interne de demain. Tu es l'analyste sur le dossier.</p>
+
+<div class="box">
+  <b>Équipe</b><br>
+  Sarah Laurent — Managing Director<br>
+  James Chen — Vice President<br>
+  Emma Roberts — Associate (ta référente sur ce livrable)<br>
+  Toi — Analyste
+</div>
+
+<h2>Ce qui t'est demandé</h2>
+<ol>
+  <li>Compléter les <b>trading comps</b> : market cap, enterprise value et multiples des huit comparables.</li>
+  <li>Calculer les statistiques de l'échantillon et appliquer la médiane <b>EV/EBITDA FY27E</b> à Atlas.</li>
+  <li>Dérouler le bridge enterprise value → equity value → prix par action.</li>
+  <li>Construire un <b>DCF</b> en flux non leviers sur FY26E-FY30E, avec WACC bâti par formule.</li>
+  <li>Valeur terminale par la méthode de Gordon, convention mi-année.</li>
+  <li>Table de sensibilité WACC × croissance à l'infini.</li>
+  <li>Synthèse de valorisation et contrôles du modèle au vert.</li>
+</ol>
+
+<h2>Données financières d'Atlas</h2>
+<table>
+  <tr><th>M€</th><th style="text-align:right">FY23A</th><th style="text-align:right">FY24A</th><th style="text-align:right">FY25A</th><th style="text-align:right">FY26E</th><th style="text-align:right">FY27E</th><th style="text-align:right">FY28E</th><th style="text-align:right">FY29E</th><th style="text-align:right">FY30E</th></tr>
+  <tr><td>Chiffre d'affaires</td><td class="n">742.0</td><td class="n">798.5</td><td class="n">841.2</td><td class="n">892.0</td><td class="n">945.5</td><td class="n">996.0</td><td class="n">1041.0</td><td class="n">1082.6</td></tr>
+  <tr><td>EBITDA</td><td class="n">118.7</td><td class="n">133.6</td><td class="n">145.5</td><td class="n">158.8</td><td class="n">172.1</td><td class="n">184.3</td><td class="n">194.7</td><td class="n">204.6</td></tr>
+  <tr><td>D&amp;A</td><td class="n">29.7</td><td class="n">31.1</td><td class="n">32.8</td><td class="n">34.8</td><td class="n">36.9</td><td class="n">38.8</td><td class="n">40.6</td><td class="n">42.2</td></tr>
+  <tr><td>Capex</td><td class="n">31.2</td><td class="n">33.5</td><td class="n">35.3</td><td class="n">37.5</td><td class="n">39.7</td><td class="n">41.8</td><td class="n">43.7</td><td class="n">45.5</td></tr>
+  <tr><td>Variation du BFR</td><td class="n">7.4</td><td class="n">5.7</td><td class="n">4.3</td><td class="n">5.1</td><td class="n">5.4</td><td class="n">5.1</td><td class="n">4.5</td><td class="n">4.2</td></tr>
+</table>
+
+<h2>Structure de capital (FY25A)</h2>
+<table>
+  <tr><td>Trésorerie</td><td class="n">68.4</td></tr>
+  <tr><td>Dette financière brute</td><td class="n">315.0</td></tr>
+  <tr><td>Dettes de loyers (IFRS 16)</td><td class="n">84.5</td></tr>
+  <tr><td>Intérêts minoritaires</td><td class="n">22.0</td></tr>
+  <tr><td>Actions diluées (m)</td><td class="n">48.6</td></tr>
+</table>
+
+<h2>Comparables retenus</h2>
+<ul><li>Nova Brands</li><li>Everest Consumer</li><li>Northstar Products</li><li>Velora Group</li><li>Prime Household</li><li>Meridian Brands</li><li>Orion Consumer</li><li>Summit Products</li></ul>
+<div class="box warn">
+  <b>Point de vigilance.</b> Un comparable peut afficher des multiples bas pour de bonnes raisons.
+  Regarde la croissance et la trajectoire de marge avant de conclure à une décote injustifiée :
+  retenir un comparable structurellement dégradé tire la médiane vers le bas sans que ce soit pertinent.
+</div>
+
+<h2>Hypothèses de coût du capital</h2>
+<table>
+  <tr><td>Taux sans risque</td><td class="n">3.20%</td></tr>
+  <tr><td>Prime de risque actions</td><td class="n">6.50%</td></tr>
+  <tr><td>Beta</td><td class="n">1.12</td></tr>
+  <tr><td>Coût de la dette avant impôt</td><td class="n">5.00%</td></tr>
+  <tr><td>Taux d'impôt</td><td class="n">26.0%</td></tr>
+  <tr><td>Poids dette / capitaux propres</td><td class="n">30% / 70%</td></tr>
+  <tr><td>Croissance à l'infini</td><td class="n">2.5%</td></tr>
+</table>
+
+<h2>Avant d'envoyer</h2>
+<ul>
+  <li>Le modèle est entièrement <b>lié</b> : aucune valeur clé saisie en dur.</li>
+  <li>L'onglet Checks affiche <b>MODEL CHECK = OK</b>.</li>
+  <li>Aucune erreur #REF!, #DIV/0! ou #VALUE! ne subsiste.</li>
+  <li>Le fichier est enregistré au format <b>.xlsx</b> depuis Excel, formules recalculées.</li>
+</ul>
+
+<footer>
+  Project Atlas — cas pédagogique de M&amp;A Training Lab. Société, comparables et données entièrement fictifs.
+  Les fourchettes de valorisation produites sont des résultats d'analyse, pas des valeurs de marché objectives.
+</footer>
+</body></html>
