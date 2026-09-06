@@ -459,8 +459,33 @@ export function weaknesses(tagErrors: Record<string, number>, topN = 5): { tag: 
     .map(([tag, errors]) => ({ tag, errors: Math.round(errors) }));
 }
 
-/** Meilleur score Atlas NON assisté (le seul qui compte comme record). */
+// ─── Ce qui compte comme tentative OFFICIELLE ───────────────────────────────
+// Une tentative n'est officielle que si elle a été produite par la version
+// COURANTE du cas ET du correcteur, sans assistance. Une tentative notée par un
+// correcteur plus permissif reste dans l'historique, mais ne certifie plus rien.
+import { ATLAS_CASE_ID, ATLAS_CASE_VERSION, ATLAS_GRADER_VERSION } from "../data/projectAtlas";
+
+export function isCurrentAtlasAttempt(a: AtlasAttempt): boolean {
+  return a.caseId === ATLAS_CASE_ID
+    && a.caseVersion === ATLAS_CASE_VERSION
+    && a.graderVersion === ATLAS_GRADER_VERSION
+    && !a.assisted;
+}
+
+/** Une tentative est-elle antérieure au correcteur courant ? (affichage seul) */
+export function isLegacyAtlasAttempt(a: AtlasAttempt): boolean {
+  return !a.assisted && !isCurrentAtlasAttempt(a);
+}
+
+/** Meilleur score OFFICIEL : version courante, non assistée. */
 export function bestUnassistedAtlas(attempts: AtlasAttempt[]): AtlasAttempt | null {
+  const clean = attempts.filter(isCurrentAtlasAttempt);
+  if (clean.length === 0) return null;
+  return clean.reduce((best, a) => (a.score > best.score ? a : best));
+}
+
+/** Meilleur score toutes versions confondues — pour l'historique uniquement. */
+export function bestHistoricalAtlas(attempts: AtlasAttempt[]): AtlasAttempt | null {
   const clean = attempts.filter((a) => !a.assisted);
   if (clean.length === 0) return null;
   return clean.reduce((best, a) => (a.score > best.score ? a : best));
@@ -475,13 +500,15 @@ export function bestUnassistedAtlas(attempts: AtlasAttempt[]): AtlasAttempt | nu
 export function atlasStatus(attempts: AtlasAttempt[]):
   "Non commencé" | "En cours" | "Terminé" | "Associate-ready" | "Pratique assistée" {
   if (attempts.length === 0) return "Non commencé";
-  const clean = attempts.filter((a) => !a.assisted);
-  if (clean.length === 0) return "Pratique assistée";
-  const best = clean.reduce((b, a) => (a.score > b.score ? a : b));
-  // certificationEligible est absent des tentatives d'avant V4.1.1 : on retombe
-  // alors sur le seuil de score seul, sans jamais l'assouplir.
-  const certified = best.certificationEligible ?? best.score >= 90;
-  if (best.score >= 90 && certified) return "Associate-ready";
+  const current = attempts.filter(isCurrentAtlasAttempt);
+  if (current.length === 0) {
+    // Rien de courant : soit uniquement de l'assisté, soit de l'historique.
+    return attempts.every((a) => a.assisted) ? "Pratique assistée" : "En cours";
+  }
+  const best = current.reduce((b, a) => (a.score > b.score ? a : b));
+  // Aucun repli sur le score : sans certificationEligible explicite, pas de
+  // certification. Une tentative d'un ancien correcteur ne peut plus certifier.
+  if (best.score >= 90 && best.certificationEligible === true) return "Associate-ready";
   if (best.score >= 70) return "Terminé";
   return "En cours";
 }

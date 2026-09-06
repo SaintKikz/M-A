@@ -4,11 +4,12 @@ import { AtlasBrief } from "../components/atlas/AtlasBrief";
 import { AtlasTimer, useAtlasTimer } from "../components/atlas/AtlasTimer";
 import { AtlasUploader } from "../components/atlas/AtlasUploader";
 import { AtlasReview, AtlasAttemptHistory, AtlasStoredReview } from "../components/atlas/AtlasReview";
-import { atlasCompany } from "../data/projectAtlas";
+import { atlasCompany, ATLAS_CASE_ID, ATLAS_GRADER_VERSION } from "../data/projectAtlas";
 import { useProgress, bestUnassistedAtlas, atlasStatus } from "../store/progress";
 import type { AtlasScore } from "../lib/atlasGrader";
 import { cumulativeSeconds, fmtDuration } from "../lib/atlasTiming";
 import { normalizeAtlasAttempt, type AtlasAttempt } from "../store/progress";
+import { loadActiveAtlasTiming } from "../lib/atlasTimerSession";
 
 const TARGET_MINUTES = 90;
 
@@ -26,8 +27,12 @@ const TASKS = [
 export default function ProjectAtlas() {
   const store = useProgress();
   const { atlasAttempts, atlasSolutionViewed } = store;
-  const [phase, setPhase] = useState<"brief" | "working" | "review">(
-    atlasAttempts.length > 0 ? "review" : "brief");
+  // Une tentative déjà en cours (rechargement de page) reprend la main sur
+  // l'affichage de la revue : l'utilisateur était en train de travailler.
+  const [phase, setPhase] = useState<"brief" | "working" | "review">(() => {
+    if (loadActiveAtlasTiming() !== null) return "working";
+    return atlasAttempts.length > 0 ? "review" : "brief";
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [score, setScore] = useState<AtlasScore | null>(null);
@@ -83,9 +88,9 @@ export default function ProjectAtlas() {
 
       store.logAtlasEvent(atlasAttempts.length === 0 ? "atlas_submitted" : "atlas_resubmitted");
       store.recordAtlasAttempt({
-        caseId: "project_atlas_v1",
+        caseId: ATLAS_CASE_ID,
         caseVersion: parsed.caseVersion ?? undefined,
-        graderVersion: "1.1",
+        graderVersion: ATLAS_GRADER_VERSION,
         score: result.total,
         accuracyScore: result.accuracy, integrityScore: result.integrity,
         completionScore: result.completion, qcScore: result.qc, speedScore: result.speed,
@@ -123,6 +128,10 @@ export default function ProjectAtlas() {
       }
       // La complétion OFFICIELLE exige une tentative non assistée et certifiable.
       if (cert.eligible) store.logAtlasEvent("atlas_completed");
+
+      // La tentative est enregistrée : on peut libérer la session de timing.
+      // (Un échec de lecture plus haut sort par `return` et la conserve.)
+      timer.clearSession();
 
       setScore(result);
       setOpenedAttempt(null);
@@ -250,6 +259,14 @@ export default function ProjectAtlas() {
     return (
       <div>
         {header}
+        {timer.hadRestoredAttempt && (
+          <Card className="mb-4 !p-3 border-accent/40">
+            <p className="text-xs">
+              ↩️ Tentative reprise là où tu l'avais laissée. Le temps écoulé depuis le début
+              continue d'être compté — un rechargement ne remet pas le chronomètre à zéro.
+            </p>
+          </Card>
+        )}
         <div className="sticky top-2 z-20 mb-5 bg-surface border border-border rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
           <AtlasTimer elapsed={timer.elapsed} wall={timer.wall} paused={timer.paused}
             onTogglePause={() => timer.setPaused(!timer.paused)} targetMinutes={TARGET_MINUTES} />

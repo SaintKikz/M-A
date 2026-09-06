@@ -11,6 +11,12 @@ export const SHEETS = {
 /** Onglets sans lesquels le livrable n'a plus de sens analytique. */
 export const REQUIRED_ANALYTICAL_SHEETS = [SHEETS.comps, SHEETS.dcf, SHEETS.summary, SHEETS.checks] as const;
 
+// ─── Atlas_Raw : hypothèses de structure de capital ─────────────────────────
+export const ATLAS_RAW_CELLS = {
+  cash: "C17", grossDebt: "C18", leases: "C19", minorities: "C20",
+  dilutedShares: "C21", taxRate: "C22",
+} as const;
+
 // ─── Trading_Comps ──────────────────────────────────────────────────────────
 export const COMPS_FIRST_ROW = 7;
 export const COMPS_RAW_FIRST_ROW = 6;

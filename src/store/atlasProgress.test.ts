@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  useProgress, bestUnassistedAtlas, atlasStatus, normalizeAtlasAttempt,
-  newAttemptId, type AtlasAttempt,
+  useProgress, bestUnassistedAtlas, bestHistoricalAtlas, atlasStatus,
+  normalizeAtlasAttempt, newAttemptId, isCurrentAtlasAttempt, isLegacyAtlasAttempt,
+  type AtlasAttempt,
 } from "./progress";
+import { ATLAS_CASE_ID, ATLAS_CASE_VERSION, ATLAS_GRADER_VERSION } from "../data/projectAtlas";
 
 const base = {
-  caseId: "project_atlas_v1", caseVersion: "1.1.0", graderVersion: "1.1",
+  caseId: ATLAS_CASE_ID, caseVersion: ATLAS_CASE_VERSION, graderVersion: ATLAS_GRADER_VERSION,
   accuracyScore: 30, integrityScore: 12, completionScore: 10, qcScore: 6, speedScore: 10,
   durationSeconds: 3600, wallDurationSeconds: 3600, activeDurationSeconds: 3400,
   solutionViewed: false, issues: [], filename: "atlas.xlsx",
@@ -173,5 +175,76 @@ describe("Statut officiel", () => {
     expect(atlasStatus([mk(92, false)])).toBe("Associate-ready");
     expect(atlasStatus([mk(72, false), mk(100, true)])).toBe("Terminé");
     expect(atlasStatus([mk(100, true)])).toBe("Pratique assistée");
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  V4.1.2 — une tentative d'un ancien correcteur ne certifie plus
+// ═══════════════════════════════════════════════════════════════════════════
+describe("Certification liée au correcteur courant", () => {
+  const mk = (o: Partial<AtlasAttempt>): AtlasAttempt => ({
+    caseId: ATLAS_CASE_ID, caseVersion: ATLAS_CASE_VERSION, graderVersion: ATLAS_GRADER_VERSION,
+    attemptId: `id-${Math.random()}`, timestamp: new Date().toISOString(),
+    score: 80, accuracyScore: 0, integrityScore: 0, completionScore: 0, qcScore: 0, speedScore: 0,
+    durationSeconds: 3600, solutionViewed: false, assisted: false, issues: [], filename: "a.xlsx",
+    ...o,
+  });
+
+  it("[I] une vieille tentative à 99 sans métadonnées ne certifie pas", () => {
+    const legacy = mk({ score: 99, caseVersion: undefined, graderVersion: undefined, certificationEligible: undefined });
+    expect(isCurrentAtlasAttempt(legacy)).toBe(false);
+    expect(isLegacyAtlasAttempt(legacy)).toBe(true);
+    expect(atlasStatus([legacy])).not.toBe("Associate-ready");
+    expect(bestUnassistedAtlas([legacy])).toBeNull();
+  });
+
+  it("[J] une tentative du correcteur 1.1 à 100 n'est pas le meilleur score courant", () => {
+    const old = mk({ score: 100, graderVersion: "1.1", certificationEligible: true });
+    expect(isCurrentAtlasAttempt(old)).toBe(false);
+    expect(bestUnassistedAtlas([old])).toBeNull();
+    expect(atlasStatus([old])).not.toBe("Associate-ready");
+    // …mais elle reste visible dans l'historique
+    expect(bestHistoricalAtlas([old])?.score).toBe(100);
+  });
+
+  it("[K] une tentative courante certifiée à 94 devient Associate-ready", () => {
+    const now = mk({ score: 94, certificationEligible: true });
+    expect(isCurrentAtlasAttempt(now)).toBe(true);
+    expect(atlasStatus([now])).toBe("Associate-ready");
+    expect(bestUnassistedAtlas([now])?.score).toBe(94);
+  });
+
+  it("courante 82 + ancien correcteur 100 → officiel = 82, statut Terminé", () => {
+    const attempts = [
+      mk({ score: 100, graderVersion: "1.1", certificationEligible: true }),
+      mk({ score: 82, certificationEligible: false }),
+    ];
+    expect(bestUnassistedAtlas(attempts)?.score).toBe(82);
+    expect(atlasStatus(attempts)).toBe("Terminé");
+  });
+
+  it("un score >= 90 sans certificationEligible explicite ne certifie pas", () => {
+    const a = mk({ score: 97, certificationEligible: undefined });
+    expect(atlasStatus([a])).toBe("Terminé");   // et non Associate-ready
+  });
+
+  it("une mauvaise version de cas exclut du calcul officiel", () => {
+    const a = mk({ score: 100, caseVersion: "1.0.0", certificationEligible: true });
+    expect(isCurrentAtlasAttempt(a)).toBe(false);
+    expect(atlasStatus([a])).not.toBe("Associate-ready");
+  });
+
+  it("l'historique mixte reste intégralement visible", () => {
+    const attempts = [
+      mk({ score: 99, caseVersion: undefined, graderVersion: undefined }),      // V4.1
+      mk({ score: 100, graderVersion: "1.1", certificationEligible: true }),    // V4.1.1
+      mk({ score: 94, certificationEligible: true }),                           // courante
+      mk({ score: 100, assisted: true, certificationEligible: false }),         // assistée
+    ];
+    expect(attempts).toHaveLength(4);                        // rien n'est supprimé
+    expect(attempts.filter(isCurrentAtlasAttempt)).toHaveLength(1);
+    expect(bestUnassistedAtlas(attempts)?.score).toBe(94);
+    expect(atlasStatus(attempts)).toBe("Associate-ready");
   });
 });

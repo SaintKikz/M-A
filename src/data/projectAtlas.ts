@@ -18,7 +18,7 @@ import { dcf, equityFromEv, costOfEquityCapm, wacc as waccFn, sampleStats, type 
 
 export const ATLAS_CASE_ID = "project_atlas_v1";
 export const ATLAS_CASE_VERSION = "1.1.0";
-export const ATLAS_GRADER_VERSION = "1.1";
+export const ATLAS_GRADER_VERSION = "1.2";
 
 // ─── Calendrier ─────────────────────────────────────────────────────────────
 export const YEARS = ["FY23A", "FY24A", "FY25A", "FY26E", "FY27E", "FY28E", "FY29E", "FY30E"] as const;

@@ -95,7 +95,7 @@ export function gradeIntegrity(parsed: ParsedAtlas, targets: GradeTarget[]) {
     { keys: ["dcfCore"], budget: INTEGRITY_WEIGHTS.dcfCore },
     { keys: ["summary"], budget: INTEGRITY_WEIGHTS.summary },
   ];
-  let points = 0, hardcoded = 0, linked = 0;
+  let points = 0, hardcoded = 0, linked = 0, constantFormula = 0;
 
   for (const b of buckets) {
     const inBucket = targets.filter((t) => b.keys.includes(t.group) && t.formulaExpected);
@@ -104,21 +104,26 @@ export function gradeIntegrity(parsed: ParsedAtlas, targets: GradeTarget[]) {
     for (const t of inBucket) {
       const read = parsed.targets[t.id];
       if (!isCorrect(read, t)) continue;      // la précision sanctionne déjà
-      if (read?.hasFormula) { earned += 1; linked++; }
-      else { earned += 0.5; hardcoded++; }    // juste mais non lié
+      // Seul un lien RÉEL vaut le crédit plein. `=33.12` est une formule, mais
+      // elle ne dépend de rien : elle est traitée comme une saisie en dur.
+      if (read?.hasLinkedFormula) { earned += 1; linked++; }
+      else if (read?.hasFormula) { earned += 0.5; constantFormula++; }
+      else { earned += 0.5; hardcoded++; }
     }
     points += (earned / inBucket.length) * b.budget;
   }
 
   // Les lignes du DCF construites par l'utilisateur (croissance, marge, EBIT…)
   const dcfFilled = parsed.dcfCells.filter((c) => !c.read.blank && !c.read.error);
-  const dcfLinked = dcfFilled.filter((c) => c.read.hasFormula).length;
+  const dcfLinked = dcfFilled.filter((c) => c.read.hasLinkedFormula).length;
   if (dcfFilled.length > 0) {
     points += (dcfLinked / dcfFilled.length) * INTEGRITY_WEIGHTS.dcfRows;
-    hardcoded += dcfFilled.length - dcfLinked;
+    const unlinked = dcfFilled.length - dcfLinked;
+    constantFormula += dcfFilled.filter((c) => c.read.hasFormula && !c.read.hasLinkedFormula).length;
+    hardcoded += unlinked - dcfFilled.filter((c) => c.read.hasFormula && !c.read.hasLinkedFormula).length;
   }
 
-  return { points: Math.round(points), hardcoded, linked };
+  return { points: Math.round(points), hardcoded, linked, constantFormula };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -157,6 +162,9 @@ export function evaluateIndependentQc(parsed: ParsedAtlas, targets: GradeTarget[
   const compsEv = val("core.impliedEv"), compsEq = val("core.impliedEquity");
   const dcfEv = val("core.dcfEv"), dcfEq = val("core.dcfEquity"), dcfPrice = val("core.dcfPrice");
   const wacc = val("core.wacc");
+  // Hypothèses lues DANS le classeur soumis, pas dans les données canoniques.
+  const g = parsed.modelInputs?.terminalGrowth?.value ?? null;
+  const shares = parsed.modelInputs?.dilutedShares?.value ?? null;
 
   // Un bridge « tient » si l'equity vaut bien l'EV moins la dette nette du cas.
   const bridgeGap = (ev: number | null, eq: number | null) => {
@@ -183,8 +191,16 @@ export function evaluateIndependentQc(parsed: ParsedAtlas, targets: GradeTarget[
       passed: (bridgeGap(compsEv, compsEq) ?? Infinity) < Math.abs(E.comps.impliedEquity) * 0.02 },
     { id: "dcfBridge", label: "Bridge EV → equity du DCF cohérent",
       passed: (bridgeGap(dcfEv, dcfEq) ?? Infinity) < Math.abs(E.dcf.equityValue) * 0.02 },
+    // On compare le g SOUMIS au WACC SOUMIS — jamais à l'hypothèse canonique.
     { id: "growthLtWacc", label: "Croissance à l'infini < WACC",
-      passed: wacc !== null && wacc > 0.025 },
+      passed: g !== null && Number.isFinite(g) && wacc !== null && Number.isFinite(wacc) && g < wacc,
+      detail: g === null ? "La croissance à l'infini du DCF est vide ou illisible."
+        : wacc === null ? "Le WACC est vide ou illisible."
+        : g >= (wacc ?? 0) ? "Le taux de croissance à l'infini doit rester inférieur au WACC." : undefined },
+    { id: "dilutedShares", label: "Nombre d'actions diluées strictement positif",
+      passed: shares !== null && Number.isFinite(shares) && shares > 0,
+      detail: shares === null ? "Le nombre d'actions diluées est vide, textuel ou en erreur."
+        : shares <= 0 ? "Le nombre d'actions utilisé pour le bridge doit être strictement positif." : undefined },
     { id: "positiveOutputs", label: "EV et prix par action strictement positifs",
       passed: dcfEv !== null && dcfEv > 0 && dcfPrice !== null && dcfPrice > 0 },
     { id: "statsValid", label: "Statistiques de comps exploitables", passed: groupOk("stats", 0.8) },
@@ -241,7 +257,8 @@ export function applyScoreCaps(raw: number, parsed: ParsedAtlas, qcRules: QcRule
   if (ratio("sensitivity") < 0.5) setCap(79, "La table de sensibilité ne réconcilie pas");
 
   const failedCritical = qcRules.filter((r) => !r.passed &&
-    ["sheets", "compsBridge", "dcfBridge", "positiveOutputs", "cached"].includes(r.id));
+    ["sheets", "compsBridge", "dcfBridge", "positiveOutputs", "cached",
+     "growthLtWacc", "dilutedShares"].includes(r.id));
   if (failedCritical.length > 0) setCap(79, `Contrôles qualité en échec : ${failedCritical.map((r) => r.label).join(", ")}`);
 
   // Les défaillances se CUMULENT : un classeur cassé sur plusieurs fronts ne doit
@@ -352,6 +369,11 @@ export function gradeAtlas(parsed: ParsedAtlas, opts: GradeOptions): AtlasScore 
   }
 
   // ─── Issues d'intégrité et de QC ──────────────────────────────────────────
+  if (integ.constantFormula > 0) {
+    issues.push({ area: "Model QC", title: `${integ.constantFormula} formule(s) constante(s)`,
+      detail: "Certaines cellules contiennent une formule qui ne référence rien (du type « =33,12 »). Une formule constante vaut une saisie en dur : relie-les aux calculs amont.",
+      severity: "major", tag: "Formula Integrity" });
+  }
   if (integ.hardcoded > 0) {
     issues.push({ area: "Model QC", title: `${integ.hardcoded} sortie(s) saisie(s) en dur`,
       detail: "Le résultat est bon, mais la cellule contient un nombre et non une formule. Un modèle non lié ne bouge pas quand une hypothèse change.",
@@ -389,8 +411,13 @@ export function gradeAtlas(parsed: ParsedAtlas, opts: GradeOptions): AtlasScore 
   const allCorrect = correctAll === targets.length;
   if (!allCorrect) blockers.push(`${targets.length - correctAll} cellule(s) sur ${targets.length} ne réconcilient pas`);
 
+  // « Associate-ready » suppose un modèle réellement LIÉ : un classeur de
+  // constantes justes n'est pas un modèle, même s'il atteint 90.
+  const integrityOk = integ.points >= 18;
+  if (!integrityOk) blockers.push("Intégrité des formules insuffisante — le modèle n'est pas lié");
+
   const certifiable = total >= 90 && criticalIssues.length === 0 && capped.cap === null
-    && qcRules.every((r) => r.passed) && allCorrect;
+    && qcRules.every((r) => r.passed) && allCorrect && integrityOk;
   if (!certifiable && qcRules.some((r) => !r.passed) && !blockers.some((b) => b.includes("qualité")))
     blockers.push("Contrôles qualité incomplets");
 
@@ -412,6 +439,12 @@ export function gradeAtlas(parsed: ParsedAtlas, opts: GradeOptions): AtlasScore 
     comments.push("Valuation_Summary fait partie du livrable. Relie les fourchettes aux onglets d'analyse avant de me renvoyer le fichier.");
   if (integ.hardcoded > 0)
     comments.push("Plusieurs sorties clés sont saisies en dur. Merci de les lier : je dois pouvoir changer une hypothèse et voir tout le modèle bouger.");
+  if (integ.constantFormula > 0)
+    comments.push("Certaines sorties utilisent des formules constantes, sans lien avec le modèle. Un « =33,12 » n'est pas une formule : relie-les aux calculs amont.");
+  if (qcRules.find((r) => r.id === "growthLtWacc" && !r.passed))
+    comments.push("La croissance à l'infini de ton DCF n'est pas inférieure à ton WACC. La formule de Gordon n'a plus de sens dans ce cas.");
+  if (qcRules.find((r) => r.id === "dilutedShares" && !r.passed))
+    comments.push("Le nombre d'actions diluées ne tient pas. Sans lui, aucun prix par action n'est calculable.");
   if (checksRule && !checksRule.passed)
     comments.push("Les drapeaux de contrôle sont écrits à la main. Ils doivent tester le modèle dynamiquement — sinon ils ne prouvent rien.");
   if (capped.cap !== null)

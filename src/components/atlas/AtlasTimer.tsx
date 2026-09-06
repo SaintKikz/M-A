@@ -4,6 +4,9 @@ import {
   startAttempt, pause as pauseT, resume as resumeT,
   activeSeconds, wallSeconds, finishAttempt, type AttemptTiming,
 } from "../../lib/atlasTiming";
+import {
+  loadActiveAtlasTiming, saveActiveAtlasTiming, clearActiveAtlasTiming,
+} from "../../lib/atlasTimerSession";
 
 /**
  * Chronomètre d'une tentative. Le compteur VISIBLE se met en pause, mais le
@@ -11,9 +14,12 @@ import {
  * Chaque appel à `restart()` ouvre une nouvelle tentative repartant de zéro.
  */
 export function useAtlasTimer(running: boolean) {
-  const timing = useRef<AttemptTiming>(startAttempt());
+  // Une tentative déjà en cours est restaurée depuis sessionStorage : un
+  // rafraîchissement ne remet pas le chronomètre à zéro.
+  const restored = useRef<AttemptTiming | null>(loadActiveAtlasTiming());
+  const timing = useRef<AttemptTiming>(restored.current ?? startAttempt());
   const [, tick] = useState(0);
-  const [paused, setPausedState] = useState(false);
+  const [paused, setPausedState] = useState(restored.current?.pausedAt != null);
 
   useEffect(() => {
     if (!running || paused) return;
@@ -23,6 +29,7 @@ export function useAtlasTimer(running: boolean) {
 
   const setPaused = (p: boolean) => {
     timing.current = p ? pauseT(timing.current) : resumeT(timing.current);
+    saveActiveAtlasTiming(timing.current);
     setPausedState(p);
     tick((n) => n + 1);
   };
@@ -33,10 +40,19 @@ export function useAtlasTimer(running: boolean) {
     /** Temps horloge, utilisé pour la note de vitesse. */
     wall: wallSeconds(timing.current),
     paused, setPaused,
-    /** Fige les durées au moment de l'envoi. */
+    /** Fige les durées au moment de l'envoi (sans effacer la session). */
     finish: () => finishAttempt(timing.current),
-    /** Nouvelle tentative : tout repart de zéro. */
-    restart: () => { timing.current = startAttempt(); setPausedState(false); tick((n) => n + 1); },
+    /** Une tentative était-elle déjà en cours au chargement de la page ? */
+    hadRestoredAttempt: restored.current !== null,
+    /** Nouvelle tentative : tout repart de zéro, et on la persiste aussitôt. */
+    restart: () => {
+      timing.current = startAttempt();
+      saveActiveAtlasTiming(timing.current);
+      setPausedState(false);
+      tick((n) => n + 1);
+    },
+    /** À n'appeler qu'une fois la tentative RÉELLEMENT enregistrée. */
+    clearSession: () => clearActiveAtlasTiming(),
   };
 }
 
