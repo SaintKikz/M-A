@@ -19,6 +19,7 @@ import {
 } from "../src/data/projectAtlas.ts";
 
 import * as L from "./atlas-layout.mjs";
+import { COMPS_IMPLIED_ROWS, SUMMARY_CELLS, SENS } from "../src/data/projectAtlasLayout.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = resolve(__dirname, "../public/project-atlas");
@@ -276,7 +277,16 @@ function buildWorkbook(mode) {
   put(tc, "B31", "= Prix par action implicite (€)", { font: L.SECTION_FONT });
   putFormula(tc, "D31", "D29/D30", E.comps.impliedPrice, { fmt: L.FMT.money2, border: L.topBorder }, isStarter);
 
-  put(tc, "B34", "Rappel : un comparable peut sembler décoté pour de bonnes raisons. Regarde la croissance et la marge avant de conclure.",
+  // Prix implicites aux bornes du quartile — ils alimentent la synthèse, qui
+  // doit être LIÉE et non recopiée à la main.
+  label(tc, `B${COMPS_IMPLIED_ROWS.priceQ1}`, "Prix implicite au 1er quartile (€)");
+  putFormula(tc, `D${COMPS_IMPLIED_ROWS.priceQ1}`,
+    `(D23*H${L.COMPS_STATS_ROWS.q1}+SUM(D25:D28))/D30`, E.summary.compsLow, { fmt: L.FMT.money2 }, isStarter);
+  label(tc, `B${COMPS_IMPLIED_ROWS.priceQ3}`, "Prix implicite au 3e quartile (€)");
+  putFormula(tc, `D${COMPS_IMPLIED_ROWS.priceQ3}`,
+    `(D23*H${L.COMPS_STATS_ROWS.q3}+SUM(D25:D28))/D30`, E.summary.compsHigh, { fmt: L.FMT.money2 }, isStarter);
+
+  put(tc, "B36", "Rappel : un comparable peut sembler décoté pour de bonnes raisons. Regarde la croissance et la marge avant de conclure.",
     { font: { ...L.LABEL_FONT, italic: true, size: 9 } });
 
 
@@ -396,6 +406,10 @@ function buildWorkbook(mode) {
   put(d, "C53", "WACC ↓  /  croissance à l'infini →", { font: { ...L.LABEL_FONT, italic: true, size: 9 } });
   const sc = L.SENS_ORIGIN.col, sr = L.SENS_ORIGIN.row;
   const colLetter = (n) => String.fromCharCode(64 + n);
+  // Coin haut-gauche : une table de données à 2 variables exige une référence
+  // vers la sortie que l'on sensibilise. Sans elle, Excel ne sait pas quoi
+  // recalculer — c'était incohérent avec les instructions.
+  putFormula(d, `C${sr}`, "D49", E.dcf.pricePerShare, { fmt: L.FMT.money2 });
   A.sensitivityGrowth.forEach((g, j) =>
     put(d, `${colLetter(sc + j)}${sr}`, g, { font: L.HEADER_FONT, fill: L.HEADER_FILL, fmt: L.FMT.pct1 }));
   A.sensitivityWacc.forEach((w, i) => {
@@ -411,32 +425,41 @@ function buildWorkbook(mode) {
       }
     });
   });
-  put(d, `B${sr + 7}`, "La table de sensibilité se construit avec Données → Analyse de scénarios → Table de données (cellule d'entrée ligne = g, colonne = WACC).",
+  put(d, `B${sr + 7}`, `Sélectionne C${sr}:H${sr + 5} puis Données → Analyse de scénarios → Table de données. Cellule d'entrée en ligne : D17 (croissance). Cellule d'entrée en colonne : D16 (WACC). La cellule C${sr} référence déjà la sortie à sensibiliser.`,
     { font: { ...L.LABEL_FONT, italic: true, size: 9 } });
 
-// ─── Valuation_Summary ────────────────────────────────────────────────────
+  // ─── Valuation_Summary ────────────────────────────────────────────────────
+  // Entièrement LIÉ : chaque sortie référence Trading_Comps ou DCF. Un modèle
+  // de banquier ne recopie jamais un résultat à la main.
   const vs = wb.addWorksheet(L.SHEETS.summary, { views: [{ showGridLines: false }] });
-  vs.getColumn("B").width = 34; ["C", "D", "E"].forEach((c) => (vs.getColumn(c).width = 14));
+  vs.getColumn("B").width = 36; ["C", "D", "E"].forEach((c) => (vs.getColumn(c).width = 14));
   put(vs, "B2", "SYNTHÈSE DE VALORISATION", { font: L.TITLE_FONT });
   put(vs, "B3", "Prix par action implicite (€)", { font: { ...L.LABEL_FONT, italic: true, size: 9 } });
   headerRow(vs, 6, ["B", "C", "D", "E"], ["Méthode", "Bas", "Central", "Haut"]);
+
   const S = E.summary;
+  const TC = L.SHEETS.comps, DC = L.SHEETS.dcf;
+  const sensRange = `${DC}!${SENS.cols[0]}${SENS.firstDataRow}:${SENS.cols[4]}${SENS.firstDataRow + SENS.rowCount - 1}`;
+
   label(vs, "B7", "Comparables boursiers (EV/EBITDA FY27E)");
   label(vs, "B8", "DCF (WACC × croissance à l'infini)");
-  const sumRows = [
-    [7, [`${L.SHEETS.comps}!D30`, `${L.SHEETS.comps}!D31`, `${L.SHEETS.comps}!D31`], [S.compsLow, S.compsMid, S.compsHigh]],
-    [8, [`${L.SHEETS.dcf}!D49`, `${L.SHEETS.dcf}!D49`, `${L.SHEETS.dcf}!D49`], [S.dcfLow, S.dcfMid, S.dcfHigh]],
-  ];
-  sumRows.forEach(([row, , vals]) => {
-    ["C", "D", "E"].forEach((c, j) => putFormula(vs, `${c}${row}`, "", vals[j], { fmt: L.FMT.money2 }, isStarter));
-    if (!isStarter) ["C", "D", "E"].forEach((c, j) => {
-      const cell = vs.getCell(`${c}${row}`);
-      cell.value = vals[j]; cell.font = L.FORMULA_FONT; cell.numFmt = L.FMT.money2; cell.fill = undefined;
-    });
-  });
+
+  const summaryFormulas = {
+    compsLow:  `${TC}!D${COMPS_IMPLIED_ROWS.priceQ1}`,
+    compsMid:  `${TC}!D${COMPS_IMPLIED_ROWS.price}`,
+    compsHigh: `${TC}!D${COMPS_IMPLIED_ROWS.priceQ3}`,
+    dcfLow:    `MIN(${sensRange})`,
+    dcfMid:    `${DC}!D49`,
+    dcfHigh:   `MAX(${sensRange})`,
+    rangeLow:  "MIN(C7:C8)",
+    rangeHigh: "MAX(E7:E8)",
+  };
+
   put(vs, "B10", "Fourchette illustrative retenue", { font: L.SECTION_FONT });
-  putFormula(vs, "C10", "MIN(C7:C8)", S.rangeLow, { fmt: L.FMT.money2, border: L.topBorder }, isStarter);
-  putFormula(vs, "E10", "MAX(E7:E8)", S.rangeHigh, { fmt: L.FMT.money2, border: L.topBorder }, isStarter);
+  for (const c of SUMMARY_CELLS) {
+    putFormula(vs, c.cell, summaryFormulas[c.key], S[c.key],
+      { fmt: L.FMT.money2, border: c.cell.endsWith("10") ? L.topBorder : undefined }, isStarter);
+  }
 
   put(vs, "B13", "Les fourchettes de valorisation sont des résultats d'analyse, pas des valeurs de marché objectives.",
     { font: { ...L.SECTION_FONT, color: { argb: "FFC00000" } } });

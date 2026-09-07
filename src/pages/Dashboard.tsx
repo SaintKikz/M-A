@@ -18,7 +18,6 @@ const TOPICS: { key: string; label: string }[] = [
   { key: "behavioral", label: "Behavioral" },
 ];
 
-const DEADLINE = new Date(new Date().getFullYear(), 7, 31).toISOString(); // 31 août
 
 export default function Dashboard() {
   const s = useProgress();
@@ -30,18 +29,18 @@ export default function Dashboard() {
   const atlasState = atlasStatus(s.atlasAttempts);
   const atlasLast = s.atlasAttempts[s.atlasAttempts.length - 1];
   const weak = weaknesses(s.tagErrors);
-  const days = daysUntil(DEADLINE);
   const step = nextStep(s);
   const recos = recommendations(s);
   const cov = coverage(s);
   const bossesPassed = Object.values(s.bossResults).filter((b) => b.passed).length;
-  const currentWeek = Math.min(8, Math.max(1, 9 - Math.ceil(days / 7)));
-  const week = PLAN[currentWeek - 1];
   const doneModules = MODULES.filter((m) => m.lessonIds.length > 0 && m.lessonIds.every((l) => s.completedLessons.includes(l)));
+  // Le rythme suit la PROGRESSION réelle, pas une date fixe dans l'année.
+  const currentWeek = Math.min(8, Math.max(1, Math.round((doneModules.length / Math.max(1, MODULES.length)) * 8) + 1));
+  const week = PLAN[currentWeek - 1];
 
   return (
     <div>
-      <PageTitle emoji="📊" title="Dashboard" sub={`J-${days} avant fin août · Semaine ${currentWeek}/8 : ${week?.title}`} />
+      <PageTitle emoji="📊" title="Dashboard" sub={`${doneModules.length}/${MODULES.length} modules validés · Semaine ${currentWeek}/8 : ${week?.title}`} />
 
       {/* ═══ CONTINUER : la prochaine étape, sans réfléchir ═══ */}
       <Link to={step.to}>
@@ -200,7 +199,7 @@ export default function Dashboard() {
                 </Link>
               ))}
             </div>
-            <p className="text-xs text-muted mt-3">{doneModules.length} module(s) validé(s) · objectif : tout au vert avant fin août.</p>
+            <p className="text-xs text-muted mt-3">{doneModules.length} module(s) validé(s) sur {MODULES.length} · objectif : tout au vert.</p>
           </Card>
 
           <Card>

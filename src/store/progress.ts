@@ -17,8 +17,20 @@ export interface MistakeEntry {
 
 // ─── Livrables Excel (Project Atlas) ────────────────────────────────────────
 // On ne stocke QUE des métadonnées : jamais le contenu du classeur.
+export interface AtlasStoredIssue {
+  area: string;
+  title: string;
+  detail: string;
+  userValue?: string;
+  expectedHint?: string;
+  severity: "critical" | "major" | "minor";
+  tag: string;
+}
+
 export interface AtlasAttempt {
   caseId: string;
+  caseVersion?: string;
+  graderVersion?: string;
   attemptId: string;
   timestamp: string;        // ISO
   score: number;
@@ -27,11 +39,63 @@ export interface AtlasAttempt {
   completionScore: number;
   qcScore: number;
   speedScore: number;
+  rating?: string;
+  /** Le classeur lui-même est-il de qualité certifiable ? */
+  certifiable?: boolean;
+  /** Certification OFFICIELLE : exige aussi une tentative non assistée. */
+  certificationEligible?: boolean;
+  certificationBlockers?: string[];
+  /** Temps actif (chronomètre visible, pause déduite). */
+  activeDurationSeconds?: number;
+  /** Temps horloge du début de la tentative à l'envoi — sert à noter la vitesse. */
+  wallDurationSeconds?: number;
+  /** Conservé pour compatibilité : vaut le temps horloge. */
   durationSeconds: number;
   solutionViewed: boolean;
-  assisted: boolean;        // tentative postérieure à la révélation de la solution
-  issues: string[];         // titres des problèmes, pour l'historique
+  assisted: boolean;
+  /** Commentaires de l'Associate, pour rouvrir la revue après un refresh. */
+  comments?: string[];
+  /** Anciennes tentatives : string[]. Nouvelles : objets complets. */
+  issues: (string | AtlasStoredIssue)[];
   filename: string;
+}
+
+/** Tentative normalisée : tous les champs optionnels sont garantis présents. */
+export type NormalizedAtlasAttempt = Omit<AtlasAttempt, "comments" | "issues"> & {
+  rating: string;
+  comments: string[];
+  certifiable: boolean;
+  certificationEligible: boolean;
+  certificationBlockers: string[];
+  wallDurationSeconds: number;
+  activeDurationSeconds: number;
+  issueObjects: AtlasStoredIssue[];
+};
+
+/** Normalise une tentative, quelle que soit la version qui l'a écrite. */
+export function normalizeAtlasAttempt(a: AtlasAttempt): NormalizedAtlasAttempt {
+  const issueObjects: AtlasStoredIssue[] = (a.issues ?? []).map((i) =>
+    typeof i === "string"
+      ? { area: "Structure", title: i, detail: "", severity: "major" as const, tag: "Model QC" }
+      : i);
+  return {
+    ...a,
+    rating: a.rating ?? "—",
+    comments: a.comments ?? [],
+    certifiable: a.certifiable ?? false,
+    certificationEligible: a.certificationEligible ?? false,
+    certificationBlockers: a.certificationBlockers ?? [],
+    wallDurationSeconds: a.wallDurationSeconds ?? a.durationSeconds,
+    activeDurationSeconds: a.activeDurationSeconds ?? a.durationSeconds,
+    issueObjects,
+  };
+}
+
+/** Identifiant sans collision possible, indépendant de la taille de l'historique. */
+export function newAttemptId(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export type AtlasEvent =
@@ -321,18 +385,23 @@ export const useProgress = create<ProgressState>()(
 
       recordAtlasAttempt: (a) =>
         set((s) => {
+          const assisted = s.atlasSolutionViewed;
           const attempt: AtlasAttempt = {
             ...a,
-            attemptId: `${a.caseId}-${s.atlasAttempts.length + 1}`,
+            attemptId: newAttemptId(),
             timestamp: new Date().toISOString(),
-            // Une tentative est « assistée » dès que la solution a été consultée.
-            assisted: s.atlasSolutionViewed,
+            assisted,
           };
-          // L'exécution réelle pèse sur le Desk Ready, à la hauteur du score obtenu.
+          const next = { atlasAttempts: [...s.atlasAttempts, attempt].slice(-30) };
+
+          // Une tentative ASSISTÉE reste un exercice : elle ne fait pas progresser
+          // la compétence officielle et ne rapporte qu'un XP d'entraînement réduit.
+          if (assisted) return { ...next, xp: s.xp + 10 };
+
           const cur = s.skillScores["Exécution"] ?? { score: 50, n: 0 };
-          const alpha = 0.5; // un livrable vaut bien plus qu'une question de quiz
+          const alpha = 0.5; // un livrable pèse bien plus qu'une question de quiz
           return {
-            atlasAttempts: [...s.atlasAttempts, attempt].slice(-30),
+            ...next,
             xp: s.xp + Math.round(a.score * 1.5),
             skillScores: {
               ...s.skillScores,
@@ -390,19 +459,57 @@ export function weaknesses(tagErrors: Record<string, number>, topN = 5): { tag: 
     .map(([tag, errors]) => ({ tag, errors: Math.round(errors) }));
 }
 
-/** Meilleur score Atlas NON assisté (le seul qui compte comme record). */
+// ─── Ce qui compte comme tentative OFFICIELLE ───────────────────────────────
+// Une tentative n'est officielle que si elle a été produite par la version
+// COURANTE du cas ET du correcteur, sans assistance. Une tentative notée par un
+// correcteur plus permissif reste dans l'historique, mais ne certifie plus rien.
+import { ATLAS_CASE_ID, ATLAS_CASE_VERSION, ATLAS_GRADER_VERSION } from "../data/projectAtlas";
+
+export function isCurrentAtlasAttempt(a: AtlasAttempt): boolean {
+  return a.caseId === ATLAS_CASE_ID
+    && a.caseVersion === ATLAS_CASE_VERSION
+    && a.graderVersion === ATLAS_GRADER_VERSION
+    && !a.assisted;
+}
+
+/** Une tentative est-elle antérieure au correcteur courant ? (affichage seul) */
+export function isLegacyAtlasAttempt(a: AtlasAttempt): boolean {
+  return !a.assisted && !isCurrentAtlasAttempt(a);
+}
+
+/** Meilleur score OFFICIEL : version courante, non assistée. */
 export function bestUnassistedAtlas(attempts: AtlasAttempt[]): AtlasAttempt | null {
+  const clean = attempts.filter(isCurrentAtlasAttempt);
+  if (clean.length === 0) return null;
+  return clean.reduce((best, a) => (a.score > best.score ? a : best));
+}
+
+/** Meilleur score toutes versions confondues — pour l'historique uniquement. */
+export function bestHistoricalAtlas(attempts: AtlasAttempt[]): AtlasAttempt | null {
   const clean = attempts.filter((a) => !a.assisted);
   if (clean.length === 0) return null;
   return clean.reduce((best, a) => (a.score > best.score ? a : best));
 }
 
 /** Statut Atlas pour le Dashboard. */
-export function atlasStatus(attempts: AtlasAttempt[]): "Non commencé" | "En cours" | "Terminé" | "Associate-ready" {
+/**
+ * Statut OFFICIEL : il ne tient compte que des tentatives non assistées, et
+ * « Associate-ready » exige en plus que le classeur ait été jugé certifiable.
+ * Une tentative assistée à 100 ne peut donc jamais certifier l'utilisateur.
+ */
+export function atlasStatus(attempts: AtlasAttempt[]):
+  "Non commencé" | "En cours" | "Terminé" | "Associate-ready" | "Pratique assistée" {
   if (attempts.length === 0) return "Non commencé";
-  const best = Math.max(...attempts.map((a) => a.score));
-  if (best >= 90) return "Associate-ready";
-  if (best >= 70) return "Terminé";
+  const current = attempts.filter(isCurrentAtlasAttempt);
+  if (current.length === 0) {
+    // Rien de courant : soit uniquement de l'assisté, soit de l'historique.
+    return attempts.every((a) => a.assisted) ? "Pratique assistée" : "En cours";
+  }
+  const best = current.reduce((b, a) => (a.score > b.score ? a : b));
+  // Aucun repli sur le score : sans certificationEligible explicite, pas de
+  // certification. Une tentative d'un ancien correcteur ne peut plus certifier.
+  if (best.score >= 90 && best.certificationEligible === true) return "Associate-ready";
+  if (best.score >= 70) return "Terminé";
   return "En cours";
 }
 
